@@ -28,13 +28,13 @@ test("server-renders the DeveloperPulse experience", async () => {
   assert.match(html, /<html[^>]+data-theme="light"/i);
   assert.match(html, /src="\/theme-init\.js"/i);
   assert.match(html, /Switch to dark mode/);
-  assert.match(html, /53 frequency columns by 7 response times/);
+  assert.match(html, /taller columns indicate stronger attacks/);
   assert.match(html, /Frequency/);
-  assert.match(html, /Fast/);
+  assert.match(html, /Strong/);
   assert.match(html, /Medium/);
-  assert.match(html, /Slow/);
-  assert.match(html, /Less/);
-  assert.match(html, /More/);
+  assert.match(html, /Soft/);
+  assert.match(html, /Quiet/);
+  assert.match(html, /Loud/);
   assert.match(html, /Live Cells/);
   assert.match(html, /Timeline/);
   assert.doesNotMatch(html, /Pulse Cyan|Heat Amber/);

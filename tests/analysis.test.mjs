@@ -1,19 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  activationToLiveIntensity,
-  applyCellPeakSignals,
+  applyLiveAttackSignals,
   aggregateLiveBands,
   aggregateSpectrumData,
   aggregateTimelineBands,
   bandsToColumn,
-  cellPeakSignals,
-  cellTargets,
-  createCellProfiles,
   createEmptyGrid,
-  decayCellPeaks,
+  decayLiveAttacks,
   dbToIntensity,
-  LIVE_RESPONSE_MS,
+  energyToLiveIntensity,
+  liveAttackSignals,
+  liveBandEnergies,
+  liveCellCount,
+  LIVE_ATTACK_DECAY_MS,
+  LIVE_ATTACK_HOLD_MS,
   pushColumn,
   smoothBands,
 } from "../app/audio/analysis.ts";
@@ -45,13 +46,14 @@ test("keeps live-cell layout stable across device pixel ratios", () => {
   );
 });
 
-test("keeps timeline levels unchanged and reserves the brightest live level for peaks", () => {
+test("maps timeline and live audio levels across all five colors", () => {
   assert.equal(dbToIntensity(-90, 0), 0);
   assert.equal(dbToIntensity(-72, 0), 1);
   assert.equal(dbToIntensity(-36, 0), 4);
-  assert.equal(activationToLiveIntensity(0), 0);
-  assert.equal(activationToLiveIntensity(0.51), 2);
-  assert.equal(activationToLiveIntensity(1), 3);
+  assert.equal(energyToLiveIntensity(0), 0);
+  assert.equal(energyToLiveIntensity(0.51), 2);
+  assert.equal(energyToLiveIntensity(0.8), 3);
+  assert.equal(energyToLiveIntensity(1), 4);
 });
 
 test("keeps the existing timeline at exactly 53 columns", () => {
@@ -95,79 +97,59 @@ test("maps all 64 analysis bands into 53 ordered live columns", () => {
   assert.equal(reachedColumns.size, 53);
 });
 
-test("generates 53 frequency columns by 7 ordered response rows", () => {
-  const first = createCellProfiles();
-  const second = createCellProfiles();
-  assert.deepEqual(first, second);
-  assert.equal(first.length, 371);
-  for (let row = 0; row < 7; row += 1) {
-    const profiles = first.slice(row * 53, (row + 1) * 53);
-    assert.deepEqual(
-      profiles.map((profile) => profile.columnIndex),
-      Array.from({ length: 53 }, (_, index) => index),
-    );
-    assert.ok(
-      profiles.every((profile) => profile.responseMs === LIVE_RESPONSE_MS[row]),
-    );
-  }
-});
-
-test("uses the same level target across response rows in one frequency column", () => {
-  const profiles = [
-    { id: 0, columnIndex: 0, responseMs: 80 },
-    { id: 53, columnIndex: 0, responseMs: 140 },
-  ];
+test("maps each live frequency column to an independent color energy", () => {
   const liveBands = Array(53).fill(-100);
   liveBands[0] = -40;
-  const targets = cellTargets(profiles, liveBands, 0);
-  assert.ok(targets[0] > 0.7);
-  assert.equal(targets[0], targets[1]);
+  const energies = liveBandEnergies(liveBands, 0);
+  assert.equal(energies.length, 53);
+  assert.ok(energies[0] > 0.7);
+  assert.equal(energies[1], 0);
 });
 
-test("detects local peaks only in the assigned frequency column", () => {
-  const profiles = [
-    { id: 0, columnIndex: 0, responseMs: 80 },
-    { id: 1, columnIndex: 1, responseMs: 80 },
-    { id: 53, columnIndex: 0, responseMs: 140 },
-  ];
+test("detects attack strength only in the frequency column that rises", () => {
   const current = Array(53).fill(-100);
   const previous = Array(53).fill(-100);
   current[0] = -30;
   previous[0] = -55;
 
-  const signals = cellPeakSignals(profiles, current, previous, 0);
-  assert.ok(signals[0] >= 0.9);
+  const signals = liveAttackSignals(current, previous, 0);
+  assert.equal(signals.length, 53);
+  assert.equal(signals[0], 1);
   assert.equal(signals[1], 0);
-  assert.ok(signals[2] >= 0.9);
 });
 
-test("applies sensitivity to local peak audibility", () => {
-  const profiles = [{ id: 0, columnIndex: 0, responseMs: 80 }];
+test("uses sensitivity to gate the visibility of quiet attacks", () => {
   const current = Array(53).fill(-100);
+  const previous = Array(53).fill(-100);
   current[0] = -45;
 
-  assert.equal(cellPeakSignals(profiles, current, current, -12)[0], 0);
-  assert.ok(cellPeakSignals(profiles, current, current, 12)[0] >= 0.9);
+  assert.ok(liveAttackSignals(current, previous, -30)[0] < 0.01);
+  assert.ok(liveAttackSignals(current, previous, 12)[0] > 0.9);
 });
 
-test("fires once, rearms after the signal drops, and fades in 180ms", () => {
-  const peaks = new Float32Array(1);
-  const armed = new Uint8Array([1]);
-  const loud = new Float32Array([1]);
-  const quiet = new Float32Array([0]);
+test("holds attack height before decaying to a single sustained cell", () => {
+  const attacks = new Float32Array(1);
+  const holds = new Float32Array(1);
 
-  applyCellPeakSignals(peaks, armed, loud);
-  assert.equal(peaks[0], 1);
-  decayCellPeaks(peaks, 90);
-  assert.ok(Math.abs(peaks[0] - 0.5) < 0.0001);
+  applyLiveAttackSignals(attacks, holds, new Float32Array([1]));
+  assert.equal(attacks[0], 1);
+  assert.equal(holds[0], LIVE_ATTACK_HOLD_MS);
+  assert.equal(liveCellCount(1, attacks[0]), 7);
 
-  applyCellPeakSignals(peaks, armed, loud);
-  assert.ok(Math.abs(peaks[0] - 0.5) < 0.0001);
-  applyCellPeakSignals(peaks, armed, quiet);
-  applyCellPeakSignals(peaks, armed, loud);
-  assert.equal(peaks[0], 1);
-  assert.equal(decayCellPeaks(peaks, 180), false);
-  assert.equal(peaks[0], 0);
+  decayLiveAttacks(attacks, holds, LIVE_ATTACK_HOLD_MS);
+  assert.equal(attacks[0], 1);
+  decayLiveAttacks(attacks, holds, LIVE_ATTACK_DECAY_MS / 2);
+  assert.ok(Math.abs(attacks[0] - 0.5) < 0.0001);
+  assert.equal(liveCellCount(1, attacks[0]), 4);
+  decayLiveAttacks(attacks, holds, LIVE_ATTACK_DECAY_MS / 2);
+  assert.equal(attacks[0], 0);
+  assert.equal(liveCellCount(1, attacks[0]), 1);
+});
+
+test("keeps inaudible bands dark regardless of attack strength", () => {
+  assert.equal(liveCellCount(0.09, 1), 0);
+  assert.equal(liveCellCount(0.1, 0), 1);
+  assert.equal(liveCellCount(0.1, 1), 7);
 });
 
 test("smooths and quantizes the seven timeline bands", () => {
