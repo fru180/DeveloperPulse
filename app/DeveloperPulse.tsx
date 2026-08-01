@@ -6,14 +6,17 @@ import {
   aggregateLiveBands,
   aggregateTimelineBands,
   bandsToColumn,
+  combineLiveEnergyTargets,
   createEmptyGrid,
   decayLiveAttacks,
   energyToLiveIntensity,
   liveAttackSignals,
   liveBandEnergies,
   liveCellCount,
+  LIVE_ATTACK_REFERENCE_MS,
   pushColumn,
   smoothBands,
+  updateLiveEnergies,
 } from "./audio/analysis";
 import { BrowserTabSource } from "./audio/browser-source";
 import { isTauriRuntime, MacSystemAudioSource } from "./audio/tauri-source";
@@ -163,30 +166,12 @@ function renderLiveCells(
   });
 }
 
-function updateLiveEnergies(
-  energies: Float32Array,
-  targets: Float32Array,
-  deltaMs: number,
-  running: boolean,
-) {
-  let hasVisibleCell = false;
-  for (let index = 0; index < energies.length; index += 1) {
-    const current = energies[index];
-    const target = running ? targets[index] : 0;
-    const duration = target > current ? 35 : 180;
-    const blend = 1 - Math.exp(-deltaMs / duration);
-    const next = current + (target - current) * blend;
-    energies[index] = next < 0.002 ? 0 : next;
-    if (energies[index] >= 0.05) hasVisibleCell = true;
-  }
-  return hasVisibleCell;
-}
-
 export function DeveloperPulse() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const timelineSmoothRef = useRef<BandDb | null>(null);
-  const previousLiveBandsRef = useRef<number[] | null>(null);
+  const previousTransientBandsRef = useRef<number[] | null>(null);
+  const previousAnalysisAtRef = useRef<number | null>(null);
   const lastTimelineUpdateRef = useRef(0);
   const gridRef = useRef<IntensityColumn[]>(createEmptyGrid());
   const modeRef = useRef<VisualizerMode>("live-cells");
@@ -334,7 +319,8 @@ export function DeveloperPulse() {
     async (endedMessage?: string) => {
       await source.stop().catch(() => undefined);
       timelineSmoothRef.current = null;
-      previousLiveBandsRef.current = null;
+      previousTransientBandsRef.current = null;
+      previousAnalysisAtRef.current = null;
       liveTargetsRef.current.fill(0);
       setIdlePreview(createIdlePreviewGrid());
       setState("idle");
@@ -349,7 +335,8 @@ export function DeveloperPulse() {
     setState("requesting");
     setError(null);
     timelineSmoothRef.current = null;
-    previousLiveBandsRef.current = null;
+    previousTransientBandsRef.current = null;
+    previousAnalysisAtRef.current = null;
     lastTimelineUpdateRef.current = 0;
     liveEnergiesRef.current.fill(0);
     liveTargetsRef.current.fill(0);
@@ -361,21 +348,33 @@ export function DeveloperPulse() {
     try {
       await source.start(
         (frame) => {
-          const liveBands = aggregateLiveBands(frame.spectrumDb);
-          liveTargetsRef.current.set(
-            liveBandEnergies(liveBands, sensitivityRef.current),
+          const detailLiveBands = aggregateLiveBands(frame.spectrumDb);
+          const transientLiveBands = aggregateLiveBands(
+            frame.transientSpectrumDb ?? frame.spectrumDb,
           );
+          const elapsedMs = previousAnalysisAtRef.current
+            ? frame.capturedAtMs - previousAnalysisAtRef.current
+            : LIVE_ATTACK_REFERENCE_MS;
           const attackSignals = liveAttackSignals(
-            liveBands,
-            previousLiveBandsRef.current,
+            transientLiveBands,
+            previousTransientBandsRef.current,
             sensitivityRef.current,
+            elapsedMs,
+          );
+          liveTargetsRef.current.set(
+            combineLiveEnergyTargets(
+              liveBandEnergies(detailLiveBands, sensitivityRef.current),
+              liveBandEnergies(transientLiveBands, sensitivityRef.current),
+              attackSignals,
+            ),
           );
           applyLiveAttackSignals(
             liveAttacksRef.current,
             liveAttackHoldsRef.current,
             attackSignals,
           );
-          previousLiveBandsRef.current = liveBands;
+          previousTransientBandsRef.current = transientLiveBands;
+          previousAnalysisAtRef.current = frame.capturedAtMs;
 
           const timelineBands = smoothBands(
             timelineSmoothRef.current,
