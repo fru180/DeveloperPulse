@@ -14,6 +14,9 @@
 
   const themeColor = document.querySelector('meta[name="theme-color"]');
   if (themeColor) {
-    themeColor.setAttribute("content", theme === "dark" ? "#010409" : "#f6f8fa");
+    themeColor.setAttribute(
+      "content",
+      theme === "dark" ? "#010409" : "#f6f8fa",
+    );
   }
 })();

@@ -13,8 +13,13 @@ export class MacSystemAudioSource implements AnalysisSource {
       channel.onmessage = onFrame;
       await invoke("start_system_audio", { onMessage: channel });
     } catch (error) {
-      const message = typeof error === "string" ? error : "Could not capture Mac system audio.";
-      const code = message.toLowerCase().includes("permission") ? "permission_denied" : "capture_failed";
+      const message =
+        typeof error === "string"
+          ? error
+          : "Could not capture Mac system audio.";
+      const code = message.toLowerCase().includes("permission")
+        ? "permission_denied"
+        : "capture_failed";
       throw new CaptureError(code, message);
     }
   }

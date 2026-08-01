@@ -8,8 +8,11 @@
       (() => {
         let theme = "light";
         try {
-          const savedTheme = window.localStorage.getItem("developer-pulse-theme");
-          if (savedTheme === "light" || savedTheme === "dark") theme = savedTheme;
+          const savedTheme = window.localStorage.getItem(
+            "developer-pulse-theme",
+          );
+          if (savedTheme === "light" || savedTheme === "dark")
+            theme = savedTheme;
         } catch {}
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;

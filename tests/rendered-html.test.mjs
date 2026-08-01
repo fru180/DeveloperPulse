@@ -7,7 +7,9 @@ async function render() {
   const { default: worker } = await import(workerUrl.href);
   return worker.fetch(
     new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    {
+      ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
@@ -17,7 +19,10 @@ test("server-renders the DeveloperPulse experience", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>DeveloperPulse — System audio, visualized<\/title>/i);
+  assert.match(
+    html,
+    /<title>DeveloperPulse — System audio, visualized<\/title>/i,
+  );
   assert.match(html, /Start visualizing/);
   assert.match(html, /Local processing only/);
   assert.match(html, /<html[^>]+data-theme="light"/i);
@@ -33,5 +38,8 @@ test("server-renders the DeveloperPulse experience", async () => {
   assert.match(html, /Live Cells/);
   assert.match(html, /Timeline/);
   assert.doesNotMatch(html, /Pulse Cyan|Heat Amber/);
-  assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
+  assert.doesNotMatch(
+    html,
+    /codex-preview|react-loading-skeleton|Your site is taking shape/i,
+  );
 });
