@@ -6,6 +6,7 @@ import {
   aggregateSpectrumData,
   aggregateTimelineBands,
   bandsToColumn,
+  combineLiveEnergyTargets,
   createEmptyGrid,
   decayLiveAttacks,
   dbToIntensity,
@@ -15,9 +16,18 @@ import {
   liveCellCount,
   LIVE_ATTACK_DECAY_MS,
   LIVE_ATTACK_HOLD_MS,
+  LIVE_ATTACK_REFERENCE_MS,
+  LIVE_ENERGY_ATTACK_MS,
+  LIVE_ENERGY_RELEASE_MS,
   pushColumn,
   smoothBands,
+  updateLiveEnergies,
 } from "../app/audio/analysis.ts";
+import {
+  BROWSER_DETAIL_FFT_SIZE,
+  BROWSER_TRANSIENT_FFT_SIZE,
+  BROWSER_UPDATE_INTERVAL_MS,
+} from "../app/audio/types.ts";
 import {
   calculateCellGridLayout,
   LIVE_CELL_COLUMNS,
@@ -91,7 +101,7 @@ test("keeps the existing timeline at exactly 53 columns", () => {
 });
 
 test("aggregates FFT data into 64 logarithmic spectrum bands", () => {
-  const fftSize = 4096;
+  const fftSize = BROWSER_DETAIL_FFT_SIZE;
   const sampleRate = 48_000;
   const frequency = 700;
   const bins = new Float32Array(fftSize / 2).fill(-100);
@@ -110,7 +120,7 @@ test("aggregates FFT data into 64 logarithmic spectrum bands", () => {
 });
 
 test("keeps equal FFT components equally strong across the spectrum", () => {
-  const fftSize = 4096;
+  const fftSize = BROWSER_DETAIL_FFT_SIZE;
   const sampleRate = 48_000;
   for (const frequency of [50, 630, 1_600, 10_000, 15_000]) {
     const bins = new Float32Array(fftSize / 2).fill(-100);
@@ -147,13 +157,40 @@ test("sums energy when analysis bands are combined", () => {
 });
 
 test("does not accumulate the analysis floor as band energy", () => {
-  const fftSize = 4096;
+  const fftSize = BROWSER_DETAIL_FFT_SIZE;
   const bins = new Float32Array(fftSize / 2).fill(-100);
   const spectrum = aggregateSpectrumData(bins, 48_000, fftSize);
 
   assert.ok(spectrum.every((db) => db === -100));
   assert.ok(aggregateLiveBands(spectrum).every((db) => db === -100));
   assert.ok(aggregateTimelineBands(spectrum).every((db) => db === -100));
+});
+
+test("keeps browser FFT peaks ordered across common sample rates", () => {
+  assert.equal(BROWSER_DETAIL_FFT_SIZE, 4_096);
+  assert.equal(BROWSER_TRANSIENT_FFT_SIZE, 2_048);
+  assert.equal(BROWSER_UPDATE_INTERVAL_MS, 25);
+
+  for (const fftSize of [BROWSER_DETAIL_FFT_SIZE, BROWSER_TRANSIENT_FFT_SIZE]) {
+    for (const sampleRate of [44_100, 48_000]) {
+      const peakColumns = [50, 100, 630, 1_600, 10_000, 15_000].map(
+        (frequency) => {
+          const bins = new Float32Array(fftSize / 2).fill(-100);
+          bins[Math.round(frequency / (sampleRate / fftSize))] = -20;
+          const liveBands = aggregateLiveBands(
+            aggregateSpectrumData(bins, sampleRate, fftSize),
+          );
+          return liveBands.indexOf(Math.max(...liveBands));
+        },
+      );
+
+      assert.deepEqual(
+        peakColumns,
+        peakColumns.toSorted((left, right) => left - right),
+      );
+      assert.equal(new Set(peakColumns).size, peakColumns.length);
+    }
+  }
 });
 
 test("maps all 64 analysis bands into 53 ordered live columns", () => {
@@ -180,6 +217,32 @@ test("maps each live frequency column to an independent color energy", () => {
   assert.equal(energies[1], 0);
 });
 
+test("uses transient energy only to brighten an active attack", () => {
+  const targets = combineLiveEnergyTargets(
+    new Float32Array([0.2, 0.8, 0.2]),
+    new Float32Array([0.9, 0.4, 0.8]),
+    new Float32Array([0, 1, 0.5]),
+  );
+
+  assert.ok(Math.abs(targets[0] - 0.2) < 0.0001);
+  assert.ok(Math.abs(targets[1] - 0.8) < 0.0001);
+  assert.ok(Math.abs(targets[2] - 0.5) < 0.0001);
+});
+
+test("raises live energy within one display frame and keeps the release time", () => {
+  const energies = new Float32Array(1);
+  const targets = new Float32Array([0.2]);
+
+  assert.equal(LIVE_ENERGY_ATTACK_MS, 15);
+  assert.equal(LIVE_ENERGY_RELEASE_MS, 180);
+  updateLiveEnergies(energies, targets, 1_000 / 60, true);
+  assert.ok(energies[0] >= 0.1);
+
+  energies[0] = 1;
+  updateLiveEnergies(energies, new Float32Array(1), 180, true);
+  assert.ok(Math.abs(energies[0] - Math.exp(-1)) < 0.0001);
+});
+
 test("detects attack strength only in the frequency column that rises", () => {
   const current = Array(53).fill(-100);
   const previous = Array(53).fill(-100);
@@ -190,6 +253,20 @@ test("detects attack strength only in the frequency column that rises", () => {
   assert.equal(signals.length, 53);
   assert.equal(signals[0], 1);
   assert.equal(signals[1], 0);
+});
+
+test("normalizes attack strength across analysis intervals", () => {
+  const previous50ms = Array(53).fill(-100);
+  const previous25ms = Array(53).fill(-100);
+  const current = Array(53).fill(-100);
+  previous50ms[0] = -55;
+  previous25ms[0] = -50;
+  current[0] = -45;
+
+  assert.equal(LIVE_ATTACK_REFERENCE_MS, 50);
+  const signal50ms = liveAttackSignals(current, previous50ms, 12, 50)[0];
+  const signal25ms = liveAttackSignals(current, previous25ms, 12, 25)[0];
+  assert.ok(Math.abs(signal25ms - signal50ms) < 0.0001);
 });
 
 test("uses sensitivity to gate the visibility of quiet attacks", () => {
