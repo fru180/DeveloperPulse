@@ -80,6 +80,53 @@ test("aggregates FFT data into 64 logarithmic spectrum bands", () => {
   assert.equal(aggregateTimelineBands(spectrum).length, 7);
 });
 
+test("keeps equal FFT components equally strong across the spectrum", () => {
+  const fftSize = 4096;
+  const sampleRate = 48_000;
+  for (const frequency of [50, 630, 1_600, 10_000, 15_000]) {
+    const bins = new Float32Array(fftSize / 2).fill(-100);
+    bins[Math.round(frequency / (sampleRate / fftSize))] = -20;
+    const spectrum = aggregateSpectrumData(bins, sampleRate, fftSize);
+    const liveBands = aggregateLiveBands(spectrum);
+    const spectrumEnergy = spectrum.reduce(
+      (power, db) => power + (db > -100 ? 10 ** (db / 10) : 0),
+      0,
+    );
+    const liveEnergy = liveBands.reduce(
+      (power, db) => power + (db > -100 ? 10 ** (db / 10) : 0),
+      0,
+    );
+    assert.ok(
+      Math.abs(10 * Math.log10(spectrumEnergy) - -20) < 0.0001,
+      `${frequency}Hz spectrum energy was ${10 * Math.log10(spectrumEnergy)}dB`,
+    );
+    assert.ok(
+      Math.abs(10 * Math.log10(liveEnergy) - -20) < 0.0001,
+      `${frequency}Hz live energy was ${10 * Math.log10(liveEnergy)}dB`,
+    );
+  }
+});
+
+test("sums energy when analysis bands are combined", () => {
+  const spectrum = Array(64).fill(-100);
+  spectrum[2] = -40;
+  spectrum[3] = -40;
+  const expected = -40 + 10 * Math.log10(2);
+
+  assert.ok(Math.abs(aggregateLiveBands(spectrum)[2] - expected) < 0.0001);
+  assert.ok(Math.abs(aggregateTimelineBands(spectrum)[0] - expected) < 0.0001);
+});
+
+test("does not accumulate the analysis floor as band energy", () => {
+  const fftSize = 4096;
+  const bins = new Float32Array(fftSize / 2).fill(-100);
+  const spectrum = aggregateSpectrumData(bins, 48_000, fftSize);
+
+  assert.ok(spectrum.every((db) => db === -100));
+  assert.ok(aggregateLiveBands(spectrum).every((db) => db === -100));
+  assert.ok(aggregateTimelineBands(spectrum).every((db) => db === -100));
+});
+
 test("maps all 64 analysis bands into 53 ordered live columns", () => {
   const reachedColumns = new Set();
   for (let spectrumIndex = 0; spectrumIndex < 64; spectrumIndex += 1) {
