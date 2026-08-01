@@ -50,7 +50,7 @@ npm run tauri dev
 
 ### 表示の調整
 
-- **Live Cells**: 周波数ごとの音の強さと反応の違いを表示します。
+- **Live Cells**: 色で周波数ごとの音の強さを、セル数で音の立ち上がりの強さを表示します。
 - **Timeline**: 周波数帯ごとの音の強さを時間の流れに沿って表示します。
 - **Sensitivity**: 音に対するセルの反応の強さを調整します。
 - 右端のボタンで全画面表示に切り替えられます。
@@ -102,7 +102,7 @@ npm run tauri dev
 
 ### Display controls
 
-- **Live Cells**: Shows audio intensity across frequencies and response times.
+- **Live Cells**: Uses color for audio intensity and cell count for attack strength across frequencies.
 - **Timeline**: Shows audio intensity by frequency band over time.
 - **Sensitivity**: Adjusts how strongly the cells react to audio.
 - Use the button on the right to enter or exit full screen.

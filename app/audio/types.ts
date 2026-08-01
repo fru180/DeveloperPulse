@@ -29,12 +29,6 @@ export type IntensityColumn = [
 export type SpectrumDb = number[];
 export type VisualizerMode = "live-cells" | "timeline";
 
-export interface CellProfile {
-  id: number;
-  columnIndex: number;
-  responseMs: number;
-}
-
 export interface AnalysisFrame {
   sequence: number;
   capturedAtMs: number;

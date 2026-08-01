@@ -2,29 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  activationToLiveIntensity,
-  applyCellPeakSignals,
+  applyLiveAttackSignals,
   aggregateLiveBands,
   aggregateTimelineBands,
   bandsToColumn,
-  cellPeakSignals,
-  cellTargets,
-  createCellProfiles,
   createEmptyGrid,
-  decayCellPeaks,
+  decayLiveAttacks,
+  energyToLiveIntensity,
+  liveAttackSignals,
+  liveBandEnergies,
+  liveCellCount,
   pushColumn,
   smoothBands,
 } from "./audio/analysis";
 import { BrowserTabSource } from "./audio/browser-source";
 import { isTauriRuntime, MacSystemAudioSource } from "./audio/tauri-source";
-import { calculateLiveCellLayout, LIVE_CELL_COLUMNS } from "./live-cell-layout";
+import {
+  calculateLiveCellLayout,
+  LIVE_CELL_COLUMNS,
+  LIVE_CELL_ROWS,
+} from "./live-cell-layout";
 import {
   BAND_LABELS,
   TIMELINE_INTERVAL_MS,
   type AnalysisSource,
   type BandDb,
   type CaptureState,
-  type CellProfile,
   type IntensityColumn,
   type VisualizerMode,
 } from "./audio/types";
@@ -47,18 +50,18 @@ const LIVE_FREQUENCY_TICKS = [
   { label: "10k", minor: true },
   { label: "16k", minor: false },
 ] as const;
-const RESPONSE_LABELS = ["Fast", "", "", "Medium", "", "", "Slow"] as const;
+const ATTACK_LABELS = ["Strong", "", "", "Medium", "", "", "Soft"] as const;
 
 function LevelLegend() {
   return (
-    <div className="level-legend" aria-label="Level from less to more">
-      <span>Less</span>
+    <div className="level-legend" aria-label="Volume from quiet to loud">
+      <span>Quiet</span>
       <span className="legend-swatches" aria-hidden="true">
         {Array.from({ length: 5 }, (_, index) => (
           <span className={`legend-level-${index}`} key={index} />
         ))}
       </span>
-      <span>More</span>
+      <span>Loud</span>
     </div>
   );
 }
@@ -122,8 +125,8 @@ function renderTimeline(
 
 function renderLiveCells(
   canvas: HTMLCanvasElement,
-  activations: Float32Array,
-  peaks: Float32Array,
+  energies: Float32Array,
+  attacks: Float32Array,
   colors: readonly string[],
 ) {
   const { context, width, height, ratio } = prepareCanvas(canvas);
@@ -137,46 +140,41 @@ function renderLiveCells(
   const offsetY = (height - gridHeight) / 2;
   const radius = Math.min(2.4 * ratio, cellSize * 0.24);
 
-  activations.forEach((activation, index) => {
-    const column = index % LIVE_CELL_COLUMNS;
-    const row = Math.floor(index / LIVE_CELL_COLUMNS);
-    const x = offsetX + column * (cellSize + gap);
-    const y = offsetY + row * (cellSize + gap);
-    roundedCell(
-      context,
-      x,
-      y,
-      cellSize,
-      cellSize,
-      radius,
-      colors[activationToLiveIntensity(activation)],
-    );
-
-    const peak = peaks[index];
-    if (peak <= 0) return;
-    context.save();
-    context.globalAlpha = peak;
-    roundedCell(context, x, y, cellSize, cellSize, radius, colors[4]);
-    context.restore();
+  energies.forEach((energy, column) => {
+    const cellCount = liveCellCount(energy, attacks[column]);
+    const intensity = energyToLiveIntensity(energy);
+    for (let row = 0; row < LIVE_CELL_ROWS; row += 1) {
+      const x = offsetX + column * (cellSize + gap);
+      const y = offsetY + row * (cellSize + gap);
+      const active = row >= LIVE_CELL_ROWS - cellCount;
+      roundedCell(
+        context,
+        x,
+        y,
+        cellSize,
+        cellSize,
+        radius,
+        colors[active ? intensity : 0],
+      );
+    }
   });
 }
 
-function updateActivations(
-  activations: Float32Array,
+function updateLiveEnergies(
+  energies: Float32Array,
   targets: Float32Array,
-  profiles: CellProfile[],
   deltaMs: number,
   running: boolean,
 ) {
   let hasVisibleCell = false;
-  for (let index = 0; index < activations.length; index += 1) {
-    const current = activations[index];
+  for (let index = 0; index < energies.length; index += 1) {
+    const current = energies[index];
     const target = running ? targets[index] : 0;
-    const duration = target > current ? 35 : profiles[index].responseMs;
+    const duration = target > current ? 35 : 180;
     const blend = 1 - Math.exp(-deltaMs / duration);
     const next = current + (target - current) * blend;
-    activations[index] = next < 0.002 ? 0 : next;
-    if (activations[index] >= 0.05) hasVisibleCell = true;
+    energies[index] = next < 0.002 ? 0 : next;
+    if (energies[index] >= 0.05) hasVisibleCell = true;
   }
   return hasVisibleCell;
 }
@@ -189,11 +187,10 @@ export function DeveloperPulse() {
   const lastTimelineUpdateRef = useRef(0);
   const gridRef = useRef<IntensityColumn[]>(createEmptyGrid());
   const modeRef = useRef<VisualizerMode>("live-cells");
-  const profiles = useMemo(() => createCellProfiles(), []);
-  const activationsRef = useRef(new Float32Array(profiles.length));
-  const targetsRef = useRef(new Float32Array(profiles.length));
-  const peaksRef = useRef(new Float32Array(profiles.length));
-  const peakArmedRef = useRef(new Uint8Array(profiles.length).fill(1));
+  const liveEnergiesRef = useRef(new Float32Array(LIVE_CELL_COLUMNS));
+  const liveTargetsRef = useRef(new Float32Array(LIVE_CELL_COLUMNS));
+  const liveAttacksRef = useRef(new Float32Array(LIVE_CELL_COLUMNS));
+  const liveAttackHoldsRef = useRef(new Float32Array(LIVE_CELL_COLUMNS));
   const [state, setState] = useState<CaptureState>("idle");
   const [grid, setGrid] = useState<IntensityColumn[]>(() => createEmptyGrid());
   const [mode, setMode] = useState<VisualizerMode>("live-cells");
@@ -241,8 +238,8 @@ export function DeveloperPulse() {
     else
       renderLiveCells(
         canvas,
-        activationsRef.current,
-        peaksRef.current,
+        liveEnergiesRef.current,
+        liveAttacksRef.current,
         palette.levels,
       );
   }, []);
@@ -282,29 +279,32 @@ export function DeveloperPulse() {
     const tick = (time: number) => {
       const delta = Math.min(100, time - previousTime);
       previousTime = time;
-      const active = updateActivations(
-        activationsRef.current,
-        targetsRef.current,
-        profiles,
+      const active = updateLiveEnergies(
+        liveEnergiesRef.current,
+        liveTargetsRef.current,
         delta,
         state === "running",
       );
-      const peakActive = decayCellPeaks(peaksRef.current, delta);
+      const attackActive = decayLiveAttacks(
+        liveAttacksRef.current,
+        liveAttackHoldsRef.current,
+        delta,
+      );
       if (modeRef.current === "live-cells" && canvasRef.current) {
         const palette = paletteRef.current;
         renderLiveCells(
           canvasRef.current,
-          activationsRef.current,
-          peaksRef.current,
+          liveEnergiesRef.current,
+          liveAttacksRef.current,
           palette.levels,
         );
       }
-      if (state === "running" || active || peakActive)
+      if (state === "running" || active || attackActive)
         animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [profiles, state]);
+  }, [state]);
 
   useEffect(() => {
     if (!startedAt || state !== "running") return;
@@ -324,8 +324,7 @@ export function DeveloperPulse() {
       await source.stop().catch(() => undefined);
       timelineSmoothRef.current = null;
       previousLiveBandsRef.current = null;
-      targetsRef.current.fill(0);
-      peakArmedRef.current.fill(1);
+      liveTargetsRef.current.fill(0);
       setState("idle");
       setStartedAt(null);
       setElapsed("00:00");
@@ -340,25 +339,24 @@ export function DeveloperPulse() {
     timelineSmoothRef.current = null;
     previousLiveBandsRef.current = null;
     lastTimelineUpdateRef.current = 0;
-    peaksRef.current.fill(0);
-    peakArmedRef.current.fill(1);
+    liveAttacksRef.current.fill(0);
+    liveAttackHoldsRef.current.fill(0);
     try {
       await source.start(
         (frame) => {
           const liveBands = aggregateLiveBands(frame.spectrumDb);
-          targetsRef.current.set(
-            cellTargets(profiles, liveBands, sensitivityRef.current),
+          liveTargetsRef.current.set(
+            liveBandEnergies(liveBands, sensitivityRef.current),
           );
-          const peakSignals = cellPeakSignals(
-            profiles,
+          const attackSignals = liveAttackSignals(
             liveBands,
             previousLiveBandsRef.current,
             sensitivityRef.current,
           );
-          applyCellPeakSignals(
-            peaksRef.current,
-            peakArmedRef.current,
-            peakSignals,
+          applyLiveAttackSignals(
+            liveAttacksRef.current,
+            liveAttackHoldsRef.current,
+            attackSignals,
           );
           previousLiveBandsRef.current = liveBands;
 
@@ -394,7 +392,7 @@ export function DeveloperPulse() {
           : "Could not start audio capture.",
       );
     }
-  }, [profiles, source, stop]);
+  }, [source, stop]);
 
   const status = useMemo(() => {
     if (state === "requesting")
@@ -494,11 +492,11 @@ export function DeveloperPulse() {
             <div className={`canvas-stage ${mode}`}>
               <div
                 className={
-                  mode === "live-cells" ? "response-labels" : "frequency-labels"
+                  mode === "live-cells" ? "attack-labels" : "frequency-labels"
                 }
                 aria-hidden="true"
               >
-                {(mode === "live-cells" ? RESPONSE_LABELS : BAND_LABELS).map(
+                {(mode === "live-cells" ? ATTACK_LABELS : BAND_LABELS).map(
                   (label, index) => (
                     <span key={`${label}-${index}`}>{label}</span>
                   ),
@@ -519,7 +517,7 @@ export function DeveloperPulse() {
                   className="spectrum-canvas"
                   aria-label={
                     mode === "live-cells"
-                      ? "53 frequency columns by 7 response times; brighter cells indicate stronger audio"
+                      ? "53 frequency columns; brighter cells indicate louder audio and taller columns indicate stronger attacks"
                       : "53 columns of time by 7 frequency bands; brighter cells indicate louder audio"
                   }
                 />
