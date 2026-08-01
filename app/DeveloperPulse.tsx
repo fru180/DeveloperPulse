@@ -17,10 +17,7 @@ import {
 } from "./audio/analysis";
 import { BrowserTabSource } from "./audio/browser-source";
 import { isTauriRuntime, MacSystemAudioSource } from "./audio/tauri-source";
-import {
-  calculateLiveCellLayout,
-  LIVE_CELL_COLUMNS,
-} from "./live-cell-layout";
+import { calculateLiveCellLayout, LIVE_CELL_COLUMNS } from "./live-cell-layout";
 import {
   BAND_LABELS,
   TIMELINE_INTERVAL_MS,
@@ -132,7 +129,10 @@ function renderLiveCells(
   const { context, width, height, ratio } = prepareCanvas(canvas);
   if (!context) return;
   context.clearRect(0, 0, width, height);
-  const { gap, cellSize, gridWidth, gridHeight } = calculateLiveCellLayout(width, ratio);
+  const { gap, cellSize, gridWidth, gridHeight } = calculateLiveCellLayout(
+    width,
+    ratio,
+  );
   const offsetX = (width - gridWidth) / 2;
   const offsetY = (height - gridHeight) / 2;
   const radius = Math.min(2.4 * ratio, cellSize * 0.24);
@@ -207,29 +207,44 @@ export function DeveloperPulse() {
     const documentTheme = document.documentElement.dataset.theme;
     return isTheme(documentTheme) ? documentTheme : DEFAULT_THEME;
   });
-  const paletteRef = useRef<(typeof VISUALIZER_PALETTES)[Theme]>(VISUALIZER_PALETTES[theme]);
+  const paletteRef = useRef<(typeof VISUALIZER_PALETTES)[Theme]>(
+    VISUALIZER_PALETTES[theme],
+  );
   const desktop = isTauriRuntime();
   const source = useMemo<AnalysisSource>(
-    () => desktop ? new MacSystemAudioSource() : new BrowserTabSource(),
+    () => (desktop ? new MacSystemAudioSource() : new BrowserTabSource()),
     [desktop],
   );
 
-  useEffect(() => () => { void source.stop(); }, [source]);
-  useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
-  useEffect(() => { modeRef.current = mode; }, [mode]);
-  useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(
+    () => () => {
+      void source.stop();
+    },
+    [source],
+  );
+  useEffect(() => {
+    sensitivityRef.current = sensitivity;
+  }, [sensitivity]);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  useEffect(() => {
+    gridRef.current = grid;
+  }, [grid]);
 
   const drawCurrent = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const palette = paletteRef.current;
-    if (modeRef.current === "timeline") renderTimeline(canvas, gridRef.current, palette.levels);
-    else renderLiveCells(
-      canvas,
-      activationsRef.current,
-      peaksRef.current,
-      palette.levels,
-    );
+    if (modeRef.current === "timeline")
+      renderTimeline(canvas, gridRef.current, palette.levels);
+    else
+      renderLiveCells(
+        canvas,
+        activationsRef.current,
+        peaksRef.current,
+        palette.levels,
+      );
   }, []);
 
   const syncLiveGridHeight = useCallback(() => {
@@ -237,7 +252,9 @@ export function DeveloperPulse() {
     if (!canvas || modeRef.current !== "live-cells") return;
     const stage = canvas.closest<HTMLElement>(".canvas-stage");
     if (!stage) return;
-    const { gridHeight } = calculateLiveCellLayout(canvas.getBoundingClientRect().width);
+    const { gridHeight } = calculateLiveCellLayout(
+      canvas.getBoundingClientRect().width,
+    );
     stage.style.setProperty("--live-grid-height", `${gridHeight}px`);
   }, []);
 
@@ -282,7 +299,8 @@ export function DeveloperPulse() {
           palette.levels,
         );
       }
-      if (state === "running" || active || peakActive) animationFrame = requestAnimationFrame(tick);
+      if (state === "running" || active || peakActive)
+        animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
@@ -292,24 +310,29 @@ export function DeveloperPulse() {
     if (!startedAt || state !== "running") return;
     const update = () => {
       const seconds = Math.floor((Date.now() - startedAt) / 1000);
-      setElapsed(`${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`);
+      setElapsed(
+        `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`,
+      );
     };
     update();
     const timer = window.setInterval(update, 1_000);
     return () => window.clearInterval(timer);
   }, [startedAt, state]);
 
-  const stop = useCallback(async (endedMessage?: string) => {
-    await source.stop().catch(() => undefined);
-    timelineSmoothRef.current = null;
-    previousLiveBandsRef.current = null;
-    targetsRef.current.fill(0);
-    peakArmedRef.current.fill(1);
-    setState("idle");
-    setStartedAt(null);
-    setElapsed("00:00");
-    if (endedMessage) setError(endedMessage);
-  }, [source]);
+  const stop = useCallback(
+    async (endedMessage?: string) => {
+      await source.stop().catch(() => undefined);
+      timelineSmoothRef.current = null;
+      previousLiveBandsRef.current = null;
+      targetsRef.current.fill(0);
+      peakArmedRef.current.fill(1);
+      setState("idle");
+      setStartedAt(null);
+      setElapsed("00:00");
+      if (endedMessage) setError(endedMessage);
+    },
+    [source],
+  );
 
   const start = useCallback(async () => {
     setState("requesting");
@@ -323,10 +346,8 @@ export function DeveloperPulse() {
       await source.start(
         (frame) => {
           const liveBands = aggregateLiveBands(frame.spectrumDb);
-          targetsRef.current = cellTargets(
-            profiles,
-            liveBands,
-            sensitivityRef.current,
+          targetsRef.current.set(
+            cellTargets(profiles, liveBands, sensitivityRef.current),
           );
           const peakSignals = cellPeakSignals(
             profiles,
@@ -334,7 +355,11 @@ export function DeveloperPulse() {
             previousLiveBandsRef.current,
             sensitivityRef.current,
           );
-          applyCellPeakSignals(peaksRef.current, peakArmedRef.current, peakSignals);
+          applyCellPeakSignals(
+            peaksRef.current,
+            peakArmedRef.current,
+            peakSignals,
+          );
           previousLiveBandsRef.current = liveBands;
 
           const timelineBands = smoothBands(
@@ -342,25 +367,44 @@ export function DeveloperPulse() {
             aggregateTimelineBands(frame.spectrumDb),
           );
           timelineSmoothRef.current = timelineBands;
-          if (frame.capturedAtMs - lastTimelineUpdateRef.current >= TIMELINE_INTERVAL_MS) {
+          if (
+            frame.capturedAtMs - lastTimelineUpdateRef.current >=
+            TIMELINE_INTERVAL_MS
+          ) {
             lastTimelineUpdateRef.current = frame.capturedAtMs;
-            setGrid((current) => pushColumn(current, bandsToColumn(timelineBands, sensitivityRef.current)));
+            setGrid((current) =>
+              pushColumn(
+                current,
+                bandsToColumn(timelineBands, sensitivityRef.current),
+              ),
+            );
           }
         },
-        (message) => { void stop(message ?? "Capture ended."); },
+        (message) => {
+          void stop(message ?? "Capture ended.");
+        },
       );
       setStartedAt(Date.now());
       setState("running");
     } catch (captureError) {
       setState("error");
-      setError(captureError instanceof Error ? captureError.message : "Could not start audio capture.");
+      setError(
+        captureError instanceof Error
+          ? captureError.message
+          : "Could not start audio capture.",
+      );
     }
   }, [profiles, source, stop]);
 
   const status = useMemo(() => {
-    if (state === "requesting") return ["Waiting for permission", desktop ? "Allow system audio capture" : "Choose a tab with audio"];
+    if (state === "requesting")
+      return [
+        "Waiting for permission",
+        desktop ? "Allow system audio capture" : "Choose a tab with audio",
+      ];
     if (state === "running") return ["Listening", source.label];
-    if (state === "error") return ["Capture unavailable", "Check the message below and retry"];
+    if (state === "error")
+      return ["Capture unavailable", "Check the message below and retry"];
     return ["Ready", desktop ? "Mac system audio" : "Chrome tab audio"];
   }, [desktop, source.label, state]);
 
@@ -373,7 +417,8 @@ export function DeveloperPulse() {
     const nextTheme: Theme = theme === "light" ? "dark" : "light";
     document.documentElement.dataset.theme = nextTheme;
     document.documentElement.style.colorScheme = nextTheme;
-    document.querySelector('meta[name="theme-color"]')
+    document
+      .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", THEME_META_COLORS[nextTheme]);
     paletteRef.current = VISUALIZER_PALETTES[nextTheme];
     try {
@@ -389,35 +434,54 @@ export function DeveloperPulse() {
       <header className="topbar">
         <div className="brand" aria-label="DeveloperPulse">
           <span className="brand-mark" aria-hidden="true">
-            {Array.from({ length: 9 }, (_, index) => <span key={index} />)}
+            {Array.from({ length: 9 }, (_, index) => (
+              <span key={index} />
+            ))}
           </span>
           DeveloperPulse
         </div>
         <div className="topbar-actions">
-          <div className="privacy-note"><span className="privacy-dot" />Local processing only</div>
-          <button
-            className="theme-toggle"
-            type="button"
-            onClick={toggleTheme}
-          >
-            <svg className="theme-icon theme-icon-moon" viewBox="0 0 16 16" aria-hidden="true">
+          <div className="privacy-note">
+            <span className="privacy-dot" />
+            Local processing only
+          </div>
+          <button className="theme-toggle" type="button" onClick={toggleTheme}>
+            <svg
+              className="theme-icon theme-icon-moon"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+            >
               <path d="M14 10.45A6.5 6.5 0 0 1 5.55 2 6.5 6.5 0 1 0 14 10.45Z" />
             </svg>
-            <svg className="theme-icon theme-icon-sun" viewBox="0 0 16 16" aria-hidden="true">
+            <svg
+              className="theme-icon theme-icon-sun"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+            >
               <circle cx="8" cy="8" r="3" />
               <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06" />
             </svg>
-            <span className="visually-hidden theme-label-dark">Switch to dark mode</span>
-            <span className="visually-hidden theme-label-light">Switch to light mode</span>
+            <span className="visually-hidden theme-label-dark">
+              Switch to dark mode
+            </span>
+            <span className="visually-hidden theme-label-light">
+              Switch to light mode
+            </span>
           </button>
         </div>
       </header>
 
       <section className="workspace">
-        <section className="visualizer-panel" ref={panelRef} aria-label="Audio frequency visualizer">
+        <section
+          className="visualizer-panel"
+          ref={panelRef}
+          aria-label="Audio frequency visualizer"
+        >
           <div className="panel-head">
             <div className="capture-state" role="status" aria-live="polite">
-              <span className={`state-light ${state === "running" ? "running" : ""}`} />
+              <span
+                className={`state-light ${state === "running" ? "running" : ""}`}
+              />
               <span className="state-copy">
                 <span className="state-title">{status[0]}</span>
                 <span className="state-detail">{status[1]}</span>
@@ -428,29 +492,43 @@ export function DeveloperPulse() {
 
           <div className="canvas-wrap">
             <div className={`canvas-stage ${mode}`}>
-              <div className={mode === "live-cells" ? "response-labels" : "frequency-labels"} aria-hidden="true">
-                {(mode === "live-cells" ? RESPONSE_LABELS : BAND_LABELS).map((label, index) => (
-                  <span key={`${label}-${index}`}>{label}</span>
-                ))}
+              <div
+                className={
+                  mode === "live-cells" ? "response-labels" : "frequency-labels"
+                }
+                aria-hidden="true"
+              >
+                {(mode === "live-cells" ? RESPONSE_LABELS : BAND_LABELS).map(
+                  (label, index) => (
+                    <span key={`${label}-${index}`}>{label}</span>
+                  ),
+                )}
               </div>
               <div className="canvas-column">
                 {mode === "live-cells" && (
                   <div className="live-frequency-axis" aria-hidden="true">
                     {LIVE_FREQUENCY_TICKS.map(({ label, minor }) => (
-                      <span className={minor ? "minor" : undefined} key={label}>{label}</span>
+                      <span className={minor ? "minor" : undefined} key={label}>
+                        {label}
+                      </span>
                     ))}
                   </div>
                 )}
                 <canvas
                   ref={canvasRef}
                   className="spectrum-canvas"
-                  aria-label={mode === "live-cells"
-                    ? "53 frequency columns by 7 response times; brighter cells indicate stronger audio"
-                    : "53 columns of time by 7 frequency bands; brighter cells indicate louder audio"}
+                  aria-label={
+                    mode === "live-cells"
+                      ? "53 frequency columns by 7 response times; brighter cells indicate stronger audio"
+                      : "53 columns of time by 7 frequency bands; brighter cells indicate louder audio"
+                  }
                 />
                 <div className={`graph-footer ${mode}`}>
                   {mode === "timeline" ? (
-                    <div className="timeline" aria-hidden="true"><span>−15.9 sec</span><span>Now</span></div>
+                    <div className="timeline" aria-hidden="true">
+                      <span>−15.9 sec</span>
+                      <span>Now</span>
+                    </div>
                   ) : (
                     <span className="axis-name">Frequency</span>
                   )}
@@ -459,20 +537,32 @@ export function DeveloperPulse() {
               </div>
             </div>
             {state !== "running" && state !== "requesting" && (
-              <div className="idle-overlay"><span className="idle-message">Start to visualize</span></div>
+              <div className="idle-overlay">
+                <span className="idle-message">Start to visualize</span>
+              </div>
             )}
           </div>
 
-          {error && <div className="error-banner" role="alert">{error}</div>}
+          {error && (
+            <div className="error-banner" role="alert">
+              {error}
+            </div>
+          )}
 
           <div className="controls">
             <button
               className={`primary-button ${state === "running" ? "stop" : ""}`}
               type="button"
               disabled={state === "requesting"}
-              onClick={state === "running" ? () => void stop() : () => void start()}
+              onClick={
+                state === "running" ? () => void stop() : () => void start()
+              }
             >
-              {state === "requesting" ? "Connecting…" : state === "running" ? "Stop visualizing" : "Start visualizing"}
+              {state === "requesting"
+                ? "Connecting…"
+                : state === "running"
+                  ? "Stop visualizing"
+                  : "Start visualizing"}
             </button>
             <span className="control-divider" />
             <label className="range-control">
@@ -485,16 +575,32 @@ export function DeveloperPulse() {
                 value={sensitivity}
                 onChange={(event) => setSensitivity(Number(event.target.value))}
               />
-              <span className="range-value">{sensitivity > 0 ? "+" : ""}{sensitivity}dB</span>
+              <span className="range-value">
+                {sensitivity > 0 ? "+" : ""}
+                {sensitivity}dB
+              </span>
             </label>
             <label>
-              <span className="control-label visually-hidden">Visualizer mode</span>
-              <select className="select-control" value={mode} onChange={(event) => setMode(event.target.value as VisualizerMode)}>
+              <span className="control-label visually-hidden">
+                Visualizer mode
+              </span>
+              <select
+                className="select-control"
+                value={mode}
+                onChange={(event) =>
+                  setMode(event.target.value as VisualizerMode)
+                }
+              >
                 <option value="live-cells">Live Cells</option>
                 <option value="timeline">Timeline</option>
               </select>
             </label>
-            <button className="icon-button" type="button" aria-label="Toggle fullscreen" onClick={() => void toggleFullscreen()}>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Toggle fullscreen"
+              onClick={() => void toggleFullscreen()}
+            >
               <span className="fullscreen-glyph" aria-hidden="true" />
             </button>
           </div>

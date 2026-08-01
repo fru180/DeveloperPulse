@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - stg
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          web=false
+          native=false
+
+          if ! git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+            app desktop worker tests public \
+            package.json package-lock.json tsconfig.json \
+            eslint.config.mjs next.config.ts postcss.config.mjs \
+            vite.config.ts vite.desktop.config.ts .prettierignore \
+            .github/workflows/ci.yml; then
+            web=true
+          fi
+
+          if ! git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+            src-tauri/src src-tauri/Cargo.toml src-tauri/Cargo.lock \
+            src-tauri/build.rs src-tauri/tauri.conf.json \
+            src-tauri/capabilities src-tauri/Info.plist \
+            .github/workflows/ci.yml; then
+            native=true
+          fi
+
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+
+  web:
+    name: Web quality
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:web:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build and test
+        run: npm test
+
+  native:
+    name: Native quality
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Lint
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  result:
+    name: CI result
+    if: always()
+    needs:
+      - changes
+      - web
+      - native
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      WEB_RESULT: ${{ needs.web.result }}
+      NATIVE_RESULT: ${{ needs.native.result }}
+    steps:
+      - name: Verify required jobs
+        run: |
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Change detection did not succeed: $CHANGES_RESULT"
+            exit 1
+          fi
+
+          for result in "$WEB_RESULT" "$NATIVE_RESULT"; do
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              echo "A quality job did not succeed: $result"
+              exit 1
+            fi
+          done

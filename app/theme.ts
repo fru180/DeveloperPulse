@@ -15,9 +15,12 @@ export const VISUALIZER_PALETTES = {
   dark: {
     levels: ["#151b23", "#033a16", "#196c2e", "#2ea043", "#56d364"],
   },
-} as const satisfies Record<Theme, {
-  levels: readonly [string, string, string, string, string];
-}>;
+} as const satisfies Record<
+  Theme,
+  {
+    levels: readonly [string, string, string, string, string];
+  }
+>;
 
 export function isTheme(value: unknown): value is Theme {
   return value === "light" || value === "dark";

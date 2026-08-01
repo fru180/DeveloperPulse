@@ -17,7 +17,15 @@ export const TIMELINE_INTERVAL_MS = 300;
 
 export type BandDb = [number, number, number, number, number, number, number];
 export type Intensity = 0 | 1 | 2 | 3 | 4;
-export type IntensityColumn = [Intensity, Intensity, Intensity, Intensity, Intensity, Intensity, Intensity];
+export type IntensityColumn = [
+  Intensity,
+  Intensity,
+  Intensity,
+  Intensity,
+  Intensity,
+  Intensity,
+  Intensity,
+];
 export type SpectrumDb = number[];
 export type VisualizerMode = "live-cells" | "timeline";
 
@@ -35,7 +43,10 @@ export interface AnalysisFrame {
 
 export interface AnalysisSource {
   readonly label: string;
-  start(onFrame: (frame: AnalysisFrame) => void, onEnded: (message?: string) => void): Promise<void>;
+  start(
+    onFrame: (frame: AnalysisFrame) => void,
+    onEnded: (message?: string) => void,
+  ): Promise<void>;
   stop(): Promise<void>;
 }
 

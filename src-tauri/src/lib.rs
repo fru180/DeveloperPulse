@@ -105,7 +105,9 @@ fn bytes_as_f32(bytes: &[u8]) -> Vec<f32> {
 
 fn downmix_audio(buffers: &AudioBufferList) -> Vec<f32> {
     if buffers.num_buffers() == 1 {
-        let Some(buffer) = buffers.get(0) else { return Vec::new() };
+        let Some(buffer) = buffers.get(0) else {
+            return Vec::new();
+        };
         let channels = buffer.number_channels.max(1) as usize;
         let values = bytes_as_f32(buffer.data());
         return values
@@ -114,10 +116,15 @@ fn downmix_audio(buffers: &AudioBufferList) -> Vec<f32> {
             .collect();
     }
 
-    let channels: Vec<Vec<f32>> = buffers.iter().map(|buffer| bytes_as_f32(buffer.data())).collect();
+    let channels: Vec<Vec<f32>> = buffers
+        .iter()
+        .map(|buffer| bytes_as_f32(buffer.data()))
+        .collect();
     let frames = channels.iter().map(Vec::len).min().unwrap_or(0);
     (0..frames)
-        .map(|index| channels.iter().map(|channel| channel[index]).sum::<f32>() / channels.len() as f32)
+        .map(|index| {
+            channels.iter().map(|channel| channel[index]).sum::<f32>() / channels.len() as f32
+        })
         .collect()
 }
 
@@ -128,7 +135,8 @@ fn analyze_samples(samples: &[f32]) -> Vec<f32> {
         .iter()
         .enumerate()
         .map(|(index, sample)| {
-            let window = 0.5 - 0.5 * (2.0 * std::f32::consts::PI * index as f32 / (FFT_SIZE - 1) as f32).cos();
+            let window = 0.5
+                - 0.5 * (2.0 * std::f32::consts::PI * index as f32 / (FFT_SIZE - 1) as f32).cos();
             Complex32::new(sample * window, 0.0)
         })
         .collect();
@@ -139,7 +147,8 @@ fn analyze_samples(samples: &[f32]) -> Vec<f32> {
     let mut output = vec![-100.0; SPECTRUM_BAND_COUNT];
     for (band_index, value) in output.iter_mut().enumerate() {
         let low = SPECTRUM_MIN_HZ * ratio.powf(band_index as f32 / SPECTRUM_BAND_COUNT as f32);
-        let high = SPECTRUM_MIN_HZ * ratio.powf((band_index + 1) as f32 / SPECTRUM_BAND_COUNT as f32);
+        let high =
+            SPECTRUM_MIN_HZ * ratio.powf((band_index + 1) as f32 / SPECTRUM_BAND_COUNT as f32);
         let start = ((low / hz_per_bin).floor() as usize).max(1);
         let end = ((high / hz_per_bin).ceil() as usize)
             .max(start + 1)
@@ -190,10 +199,14 @@ fn capture_loop(
         };
         let mut stream = SCStream::new(&filter, &config);
         stream.add_output_handler(handler, SCStreamOutputType::Audio);
-        stream.start_capture().map_err(|error| format!("Could not start system audio capture: {error}"))?;
+        stream
+            .start_capture()
+            .map_err(|error| format!("Could not start system audio capture: {error}"))?;
         let _ = ready_tx.send(Ok(()));
         let _ = stop_rx.recv();
-        stream.stop_capture().map_err(|error| format!("Could not stop system audio capture: {error}"))?;
+        stream
+            .stop_capture()
+            .map_err(|error| format!("Could not stop system audio capture: {error}"))?;
         Ok(())
     })();
 
@@ -207,7 +220,10 @@ fn start_system_audio(
     on_message: Channel<AnalysisFrame>,
     state: State<'_, CaptureState>,
 ) -> Result<(), String> {
-    let mut session = state.0.lock().map_err(|_| "Capture state is unavailable.".to_string())?;
+    let mut session = state
+        .0
+        .lock()
+        .map_err(|_| "Capture state is unavailable.".to_string())?;
     if session.is_some() {
         return Err("System audio capture is already running.".to_string());
     }
@@ -233,10 +249,17 @@ fn start_system_audio(
 
 #[tauri::command(async)]
 fn stop_system_audio(state: State<'_, CaptureState>) -> Result<(), String> {
-    let session = state.0.lock().map_err(|_| "Capture state is unavailable.".to_string())?.take();
+    let session = state
+        .0
+        .lock()
+        .map_err(|_| "Capture state is unavailable.".to_string())?
+        .take();
     if let Some(session) = session {
         let _ = session.stop_tx.send(());
-        session.handle.join().map_err(|_| "The capture thread stopped unexpectedly.".to_string())?;
+        session
+            .handle
+            .join()
+            .map_err(|_| "The capture thread stopped unexpectedly.".to_string())?;
     }
     Ok(())
 }
@@ -245,7 +268,10 @@ fn stop_system_audio(state: State<'_, CaptureState>) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(CaptureState::default())
-        .invoke_handler(tauri::generate_handler![start_system_audio, stop_system_audio])
+        .invoke_handler(tauri::generate_handler![
+            start_system_audio,
+            stop_system_audio
+        ])
         .run(tauri::generate_context!())
         .expect("error while running DeveloperPulse");
 }
@@ -256,21 +282,33 @@ mod tests {
 
     #[test]
     fn silence_is_empty() {
-        assert!(analyze_samples(&[0.0; FFT_SIZE]).iter().all(|value| *value <= -99.0));
+        assert!(analyze_samples(&[0.0; FFT_SIZE])
+            .iter()
+            .all(|value| *value <= -99.0));
     }
 
     #[test]
     fn sine_tone_peaks_in_expected_band() {
         let frequency = 700.0;
         let samples: Vec<f32> = (0..FFT_SIZE)
-            .map(|index| (2.0 * std::f32::consts::PI * frequency * index as f32 / SAMPLE_RATE).sin())
+            .map(|index| {
+                (2.0 * std::f32::consts::PI * frequency * index as f32 / SAMPLE_RATE).sin()
+            })
             .collect();
         let spectrum = analyze_samples(&samples);
-        let peak = spectrum.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
+        let peak = spectrum
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .unwrap()
+            .0;
         let expected = ((frequency / SPECTRUM_MIN_HZ).ln()
             / (SPECTRUM_MAX_HZ / SPECTRUM_MIN_HZ).ln()
             * SPECTRUM_BAND_COUNT as f32)
             .floor() as usize;
-        assert!(peak.abs_diff(expected) <= 1, "peak {peak}, expected {expected}");
+        assert!(
+            peak.abs_diff(expected) <= 1,
+            "peak {peak}, expected {expected}"
+        );
     }
 }
