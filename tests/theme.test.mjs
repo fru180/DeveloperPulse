@@ -14,6 +14,10 @@ const themeInitSource = await readFile(
   new URL("../public/theme-init.js", import.meta.url),
   "utf8",
 );
+const globalsCssSource = await readFile(
+  new URL("../app/globals.css", import.meta.url),
+  "utf8",
+);
 
 function runThemeInitializer(savedTheme, storageThrows = false) {
   const root = { dataset: {}, style: {} };
@@ -88,4 +92,10 @@ test("falls back to light when theme storage is unavailable", () => {
   assert.equal(root.dataset.theme, "light");
   assert.equal(root.style.colorScheme, "light");
   assert.equal(meta.content, "#f6f8fa");
+});
+
+test("keeps the timeline mode grid separate from its range labels", () => {
+  assert.match(globalsCssSource, /\.canvas-stage\s*\{[^}]*display:\s*grid;/s);
+  assert.doesNotMatch(globalsCssSource, /(?:^|\n)\.timeline\s*\{/);
+  assert.match(globalsCssSource, /\.timeline-range\s*\{[^}]*display:\s*flex;/s);
 });
