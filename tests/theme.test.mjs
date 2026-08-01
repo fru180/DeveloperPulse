@@ -19,7 +19,9 @@ function runThemeInitializer(savedTheme, storageThrows = false) {
   const root = { dataset: {}, style: {} };
   const meta = {
     content: "#f6f8fa",
-    setAttribute(name, value) { this[name] = value; },
+    setAttribute(name, value) {
+      this[name] = value;
+    },
   };
   const localStorage = {
     getItem() {
@@ -52,10 +54,18 @@ test("uses the current GitHub Primer theme and contribution colors", () => {
     dark: "#010409",
   });
   assert.deepEqual(VISUALIZER_PALETTES.light.levels, [
-    "#eff2f5", "#aceebb", "#4ac26b", "#2da44e", "#116329",
+    "#eff2f5",
+    "#aceebb",
+    "#4ac26b",
+    "#2da44e",
+    "#116329",
   ]);
   assert.deepEqual(VISUALIZER_PALETTES.dark.levels, [
-    "#151b23", "#033a16", "#196c2e", "#2ea043", "#56d364",
+    "#151b23",
+    "#033a16",
+    "#196c2e",
+    "#2ea043",
+    "#56d364",
   ]);
 });
 

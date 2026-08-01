@@ -1,9 +1,9 @@
 import { aggregateSpectrumData } from "./analysis";
-import {
-  CaptureError,
-  UPDATE_INTERVAL_MS,
-  type AnalysisSource,
-} from "./types";
+import { CaptureError, UPDATE_INTERVAL_MS, type AnalysisSource } from "./types";
+
+type ChromeDisplayMediaTrackConstraints = MediaTrackConstraints & {
+  suppressLocalAudioPlayback?: boolean;
+};
 
 export class BrowserTabSource implements AnalysisSource {
   readonly label = "Shared tab audio";
@@ -14,35 +14,61 @@ export class BrowserTabSource implements AnalysisSource {
   private sequence = 0;
   private stopping = false;
 
-  async start(onFrame: Parameters<AnalysisSource["start"]>[0], onEnded: Parameters<AnalysisSource["start"]>[1]) {
-    if (!navigator.mediaDevices?.getDisplayMedia || typeof AudioContext === "undefined") {
-      throw new CaptureError("unsupported", "This browser cannot capture shared tab audio. Use the latest Chrome or Edge.");
+  async start(
+    onFrame: Parameters<AnalysisSource["start"]>[0],
+    onEnded: Parameters<AnalysisSource["start"]>[1],
+  ) {
+    if (
+      !navigator.mediaDevices?.getDisplayMedia ||
+      typeof AudioContext === "undefined"
+    ) {
+      throw new CaptureError(
+        "unsupported",
+        "This browser cannot capture shared tab audio. Use the latest Chrome or Edge.",
+      );
     }
 
     this.stopping = false;
     try {
+      const audio: ChromeDisplayMediaTrackConstraints = {
+        suppressLocalAudioPlayback: false,
+      };
       this.stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: {
-          suppressLocalAudioPlayback: false,
-        },
+        audio,
       });
     } catch (error) {
-      if (error instanceof DOMException && ["NotAllowedError", "AbortError"].includes(error.name)) {
-        throw new CaptureError("permission_denied", "Sharing was cancelled. Choose a browser tab and enable ‘Share tab audio’. ");
+      if (
+        error instanceof DOMException &&
+        ["NotAllowedError", "AbortError"].includes(error.name)
+      ) {
+        throw new CaptureError(
+          "permission_denied",
+          "Sharing was cancelled. Choose a browser tab and enable ‘Share tab audio’. ",
+        );
       }
-      throw new CaptureError("capture_failed", "Could not start tab capture. Please try again.");
+      throw new CaptureError(
+        "capture_failed",
+        "Could not start tab capture. Please try again.",
+      );
     }
 
     const audioTrack = this.stream.getAudioTracks()[0];
     if (!audioTrack) {
       await this.stop();
-      throw new CaptureError("no_audio_track", "No audio was shared. Choose a browser tab and enable ‘Share tab audio’.");
+      throw new CaptureError(
+        "no_audio_track",
+        "No audio was shared. Choose a browser tab and enable ‘Share tab audio’.",
+      );
     }
 
-    audioTrack.addEventListener("ended", () => {
-      if (!this.stopping) onEnded("Tab sharing ended.");
-    }, { once: true });
+    audioTrack.addEventListener(
+      "ended",
+      () => {
+        if (!this.stopping) onEnded("Tab sharing ended.");
+      },
+      { once: true },
+    );
 
     this.context = new AudioContext();
     await this.context.resume();
@@ -61,7 +87,11 @@ export class BrowserTabSource implements AnalysisSource {
       onFrame({
         sequence: this.sequence++,
         capturedAtMs: Date.now(),
-        spectrumDb: aggregateSpectrumData(values, this.context?.sampleRate ?? 48_000, analyser.fftSize),
+        spectrumDb: aggregateSpectrumData(
+          values,
+          this.context?.sampleRate ?? 48_000,
+          analyser.fftSize,
+        ),
       });
     }, UPDATE_INTERVAL_MS);
   }
@@ -72,7 +102,8 @@ export class BrowserTabSource implements AnalysisSource {
     this.timer = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
-    if (this.context && this.context.state !== "closed") await this.context.close();
+    if (this.context && this.context.state !== "closed")
+      await this.context.close();
     this.context = null;
   }
 }
