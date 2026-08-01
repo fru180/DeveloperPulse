@@ -13,7 +13,9 @@ export const COLUMN_COUNT = 53;
 export const ROW_COUNT = 7;
 export const SPECTRUM_BAND_COUNT = 64;
 export const UPDATE_INTERVAL_MS = 50;
-export const TIMELINE_INTERVAL_MS = 300;
+export const TIMELINE_INTERVAL_MS = 500;
+export const TIMELINE_WINDOW_SECONDS =
+  (COLUMN_COUNT * TIMELINE_INTERVAL_MS) / 1_000;
 
 export type BandDb = [number, number, number, number, number, number, number];
 export type Intensity = 0 | 1 | 2 | 3 | 4;
