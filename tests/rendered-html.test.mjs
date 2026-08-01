@@ -20,6 +20,9 @@ test("server-renders the DeveloperPulse experience", async () => {
   assert.match(html, /<title>DeveloperPulse — System audio, visualized<\/title>/i);
   assert.match(html, /Start visualizing/);
   assert.match(html, /Local processing only/);
+  assert.match(html, /<html[^>]+data-theme="light"/i);
+  assert.match(html, /src="\/theme-init\.js"/i);
+  assert.match(html, /Switch to dark mode/);
   assert.match(html, /53 frequency columns by 7 response times/);
   assert.match(html, /Frequency/);
   assert.match(html, /Fast/);

@@ -31,10 +31,15 @@ import {
   type IntensityColumn,
   type VisualizerMode,
 } from "./audio/types";
+import {
+  DEFAULT_THEME,
+  isTheme,
+  THEME_META_COLORS,
+  THEME_STORAGE_KEY,
+  type Theme,
+  VISUALIZER_PALETTES,
+} from "./theme";
 
-const GITHUB_GREEN = ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353"] as const;
-const PEAK_GREEN = "#7ee787";
-const LIVE_LEGEND_GREEN = [GITHUB_GREEN[0], GITHUB_GREEN[1], GITHUB_GREEN[2], GITHUB_GREEN[3], PEAK_GREEN] as const;
 const LIVE_FREQUENCY_TICKS = [
   { label: "40Hz", minor: false },
   { label: "100", minor: true },
@@ -47,13 +52,14 @@ const LIVE_FREQUENCY_TICKS = [
 ] as const;
 const RESPONSE_LABELS = ["Fast", "", "", "Medium", "", "", "Slow"] as const;
 
-function LevelLegend({ live }: { live: boolean }) {
-  const colors = live ? LIVE_LEGEND_GREEN : GITHUB_GREEN;
+function LevelLegend() {
   return (
     <div className="level-legend" aria-label="Level from less to more">
       <span>Less</span>
       <span className="legend-swatches" aria-hidden="true">
-        {colors.map((color) => <span key={color} style={{ backgroundColor: color }} />)}
+        {Array.from({ length: 5 }, (_, index) => (
+          <span className={`legend-level-${index}`} key={index} />
+        ))}
       </span>
       <span>More</span>
     </div>
@@ -87,7 +93,11 @@ function roundedCell(
   context.fill();
 }
 
-function renderTimeline(canvas: HTMLCanvasElement, grid: IntensityColumn[]) {
+function renderTimeline(
+  canvas: HTMLCanvasElement,
+  grid: IntensityColumn[],
+  colors: readonly string[],
+) {
   const { context, width, height, ratio } = prepareCanvas(canvas);
   if (!context) return;
   context.clearRect(0, 0, width, height);
@@ -107,7 +117,7 @@ function renderTimeline(canvas: HTMLCanvasElement, grid: IntensityColumn[]) {
         cellWidth,
         cellHeight,
         radius,
-        GITHUB_GREEN[level],
+        colors[level],
       );
     });
   });
@@ -117,6 +127,7 @@ function renderLiveCells(
   canvas: HTMLCanvasElement,
   activations: Float32Array,
   peaks: Float32Array,
+  colors: readonly string[],
 ) {
   const { context, width, height, ratio } = prepareCanvas(canvas);
   if (!context) return;
@@ -138,16 +149,14 @@ function renderLiveCells(
       cellSize,
       cellSize,
       radius,
-      GITHUB_GREEN[activationToLiveIntensity(activation)],
+      colors[activationToLiveIntensity(activation)],
     );
 
     const peak = peaks[index];
     if (peak <= 0) return;
     context.save();
     context.globalAlpha = peak;
-    context.shadowColor = `rgba(57, 211, 83, ${Math.min(0.9, peak)})`;
-    context.shadowBlur = 10 * ratio * peak;
-    roundedCell(context, x, y, cellSize, cellSize, radius, PEAK_GREEN);
+    roundedCell(context, x, y, cellSize, cellSize, radius, colors[4]);
     context.restore();
   });
 }
@@ -193,6 +202,12 @@ export function DeveloperPulse() {
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState("00:00");
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof document === "undefined") return DEFAULT_THEME;
+    const documentTheme = document.documentElement.dataset.theme;
+    return isTheme(documentTheme) ? documentTheme : DEFAULT_THEME;
+  });
+  const paletteRef = useRef<(typeof VISUALIZER_PALETTES)[Theme]>(VISUALIZER_PALETTES[theme]);
   const desktop = isTauriRuntime();
   const source = useMemo<AnalysisSource>(
     () => desktop ? new MacSystemAudioSource() : new BrowserTabSource(),
@@ -207,8 +222,14 @@ export function DeveloperPulse() {
   const drawCurrent = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (modeRef.current === "timeline") renderTimeline(canvas, gridRef.current);
-    else renderLiveCells(canvas, activationsRef.current, peaksRef.current);
+    const palette = paletteRef.current;
+    if (modeRef.current === "timeline") renderTimeline(canvas, gridRef.current, palette.levels);
+    else renderLiveCells(
+      canvas,
+      activationsRef.current,
+      peaksRef.current,
+      palette.levels,
+    );
   }, []);
 
   const syncLiveGridHeight = useCallback(() => {
@@ -236,7 +257,7 @@ export function DeveloperPulse() {
       cancelAnimationFrame(resizeFrame);
       observer.disconnect();
     };
-  }, [drawCurrent, grid, mode, syncLiveGridHeight]);
+  }, [drawCurrent, grid, mode, syncLiveGridHeight, theme]);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -253,7 +274,13 @@ export function DeveloperPulse() {
       );
       const peakActive = decayCellPeaks(peaksRef.current, delta);
       if (modeRef.current === "live-cells" && canvasRef.current) {
-        renderLiveCells(canvasRef.current, activationsRef.current, peaksRef.current);
+        const palette = paletteRef.current;
+        renderLiveCells(
+          canvasRef.current,
+          activationsRef.current,
+          peaksRef.current,
+          palette.levels,
+        );
       }
       if (state === "running" || active || peakActive) animationFrame = requestAnimationFrame(tick);
     };
@@ -342,6 +369,21 @@ export function DeveloperPulse() {
     else await panelRef.current?.requestFullscreen();
   };
 
+  const toggleTheme = () => {
+    const nextTheme: Theme = theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = nextTheme;
+    document.documentElement.style.colorScheme = nextTheme;
+    document.querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", THEME_META_COLORS[nextTheme]);
+    paletteRef.current = VISUALIZER_PALETTES[nextTheme];
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch {
+      // The active theme still changes when storage is unavailable.
+    }
+    setTheme(nextTheme);
+  };
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -351,7 +393,24 @@ export function DeveloperPulse() {
           </span>
           DeveloperPulse
         </div>
-        <div className="privacy-note"><span className="privacy-dot" />Local processing only</div>
+        <div className="topbar-actions">
+          <div className="privacy-note"><span className="privacy-dot" />Local processing only</div>
+          <button
+            className="theme-toggle"
+            type="button"
+            onClick={toggleTheme}
+          >
+            <svg className="theme-icon theme-icon-moon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M14 10.45A6.5 6.5 0 0 1 5.55 2 6.5 6.5 0 1 0 14 10.45Z" />
+            </svg>
+            <svg className="theme-icon theme-icon-sun" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="3" />
+              <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06" />
+            </svg>
+            <span className="visually-hidden theme-label-dark">Switch to dark mode</span>
+            <span className="visually-hidden theme-label-light">Switch to light mode</span>
+          </button>
+        </div>
       </header>
 
       <section className="workspace">
@@ -395,7 +454,7 @@ export function DeveloperPulse() {
                   ) : (
                     <span className="axis-name">Frequency</span>
                   )}
-                  <LevelLegend live={mode === "live-cells"} />
+                  <LevelLegend />
                 </div>
               </div>
             </div>
