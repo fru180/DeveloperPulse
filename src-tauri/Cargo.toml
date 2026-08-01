@@ -1,0 +1,25 @@
+[package]
+name = "developer-pulse"
+version = "0.1.0"
+description = "A local-first system audio contribution graph"
+authors = ["DeveloperPulse"]
+edition = "2021"
+
+[lib]
+name = "developer_pulse_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "developer-pulse"
+path = "src/main.rs"
+test = false
+bench = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+rustfft = "6"
+serde = { version = "1", features = ["derive"] }
+screencapturekit = { version = "8.0.1", features = ["macos_13_0"] }
+tauri = { version = "2", features = [] }
