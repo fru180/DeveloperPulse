@@ -17,8 +17,9 @@ import {
 } from "./audio/analysis";
 import { BrowserTabSource } from "./audio/browser-source";
 import { isTauriRuntime, MacSystemAudioSource } from "./audio/tauri-source";
+import { createIdlePreviewGrid } from "./idle-preview";
 import {
-  calculateLiveCellLayout,
+  calculateCellGridLayout,
   LIVE_CELL_COLUMNS,
   LIVE_CELL_ROWS,
 } from "./live-cell-layout";
@@ -101,21 +102,22 @@ function renderTimeline(
   const { context, width, height, ratio } = prepareCanvas(canvas);
   if (!context) return;
   context.clearRect(0, 0, width, height);
-  const columns = 53;
-  const rows = 7;
-  const gap = Math.max(2 * ratio, Math.min(5 * ratio, width / 250));
-  const cellWidth = (width - gap * (columns - 1)) / columns;
-  const cellHeight = (height - gap * (rows - 1)) / rows;
-  const radius = Math.min(2.4 * ratio, cellWidth * 0.24, cellHeight * 0.24);
+  const { gap, cellSize, gridWidth, gridHeight } = calculateCellGridLayout(
+    width,
+    ratio,
+  );
+  const offsetX = (width - gridWidth) / 2;
+  const offsetY = (height - gridHeight) / 2;
+  const radius = Math.min(2.4 * ratio, cellSize * 0.24);
 
   grid.forEach((column, columnIndex) => {
     column.forEach((level, bandIndex) => {
       roundedCell(
         context,
-        columnIndex * (cellWidth + gap),
-        (rows - 1 - bandIndex) * (cellHeight + gap),
-        cellWidth,
-        cellHeight,
+        offsetX + columnIndex * (cellSize + gap),
+        offsetY + (LIVE_CELL_ROWS - 1 - bandIndex) * (cellSize + gap),
+        cellSize,
+        cellSize,
         radius,
         colors[level],
       );
@@ -132,7 +134,7 @@ function renderLiveCells(
   const { context, width, height, ratio } = prepareCanvas(canvas);
   if (!context) return;
   context.clearRect(0, 0, width, height);
-  const { gap, cellSize, gridWidth, gridHeight } = calculateLiveCellLayout(
+  const { gap, cellSize, gridWidth, gridHeight } = calculateCellGridLayout(
     width,
     ratio,
   );
@@ -193,6 +195,9 @@ export function DeveloperPulse() {
   const liveAttackHoldsRef = useRef(new Float32Array(LIVE_CELL_COLUMNS));
   const [state, setState] = useState<CaptureState>("idle");
   const [grid, setGrid] = useState<IntensityColumn[]>(() => createEmptyGrid());
+  const [idlePreview, setIdlePreview] = useState<IntensityColumn[]>(() =>
+    createIdlePreviewGrid(),
+  );
   const [mode, setMode] = useState<VisualizerMode>("live-cells");
   const [sensitivity, setSensitivity] = useState(0);
   const sensitivityRef = useRef(sensitivity);
@@ -235,6 +240,8 @@ export function DeveloperPulse() {
     const palette = paletteRef.current;
     if (modeRef.current === "timeline")
       renderTimeline(canvas, gridRef.current, palette.levels);
+    else if (state === "idle" || state === "error")
+      renderTimeline(canvas, idlePreview, palette.levels);
     else
       renderLiveCells(
         canvas,
@@ -242,27 +249,27 @@ export function DeveloperPulse() {
         liveAttacksRef.current,
         palette.levels,
       );
-  }, []);
+  }, [idlePreview, state]);
 
-  const syncLiveGridHeight = useCallback(() => {
+  const syncCellGridHeight = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || modeRef.current !== "live-cells") return;
+    if (!canvas) return;
     const stage = canvas.closest<HTMLElement>(".canvas-stage");
     if (!stage) return;
-    const { gridHeight } = calculateLiveCellLayout(
+    const { gridHeight } = calculateCellGridLayout(
       canvas.getBoundingClientRect().width,
     );
-    stage.style.setProperty("--live-grid-height", `${gridHeight}px`);
+    stage.style.setProperty("--cell-grid-height", `${gridHeight}px`);
   }, []);
 
   useEffect(() => {
-    syncLiveGridHeight();
+    syncCellGridHeight();
     drawCurrent();
     let resizeFrame = 0;
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(resizeFrame);
       resizeFrame = requestAnimationFrame(() => {
-        syncLiveGridHeight();
+        syncCellGridHeight();
         drawCurrent();
       });
     });
@@ -271,7 +278,7 @@ export function DeveloperPulse() {
       cancelAnimationFrame(resizeFrame);
       observer.disconnect();
     };
-  }, [drawCurrent, grid, mode, syncLiveGridHeight, theme]);
+  }, [drawCurrent, grid, mode, syncCellGridHeight, theme]);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -292,19 +299,22 @@ export function DeveloperPulse() {
       );
       if (modeRef.current === "live-cells" && canvasRef.current) {
         const palette = paletteRef.current;
-        renderLiveCells(
-          canvasRef.current,
-          liveEnergiesRef.current,
-          liveAttacksRef.current,
-          palette.levels,
-        );
+        if (state === "idle" || state === "error")
+          renderTimeline(canvasRef.current, idlePreview, palette.levels);
+        else
+          renderLiveCells(
+            canvasRef.current,
+            liveEnergiesRef.current,
+            liveAttacksRef.current,
+            palette.levels,
+          );
       }
       if (state === "running" || active || attackActive)
         animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [state]);
+  }, [idlePreview, state]);
 
   useEffect(() => {
     if (!startedAt || state !== "running") return;
@@ -325,6 +335,7 @@ export function DeveloperPulse() {
       timelineSmoothRef.current = null;
       previousLiveBandsRef.current = null;
       liveTargetsRef.current.fill(0);
+      setIdlePreview(createIdlePreviewGrid());
       setState("idle");
       setStartedAt(null);
       setElapsed("00:00");
@@ -339,8 +350,13 @@ export function DeveloperPulse() {
     timelineSmoothRef.current = null;
     previousLiveBandsRef.current = null;
     lastTimelineUpdateRef.current = 0;
+    liveEnergiesRef.current.fill(0);
+    liveTargetsRef.current.fill(0);
     liveAttacksRef.current.fill(0);
     liveAttackHoldsRef.current.fill(0);
+    const emptyGrid = createEmptyGrid();
+    gridRef.current = emptyGrid;
+    setGrid(emptyGrid);
     try {
       await source.start(
         (frame) => {
@@ -385,6 +401,7 @@ export function DeveloperPulse() {
       setStartedAt(Date.now());
       setState("running");
     } catch (captureError) {
+      setIdlePreview(createIdlePreviewGrid());
       setState("error");
       setError(
         captureError instanceof Error
@@ -523,7 +540,7 @@ export function DeveloperPulse() {
                 />
                 <div className={`graph-footer ${mode}`}>
                   {mode === "timeline" ? (
-                    <div className="timeline" aria-hidden="true">
+                    <div className="timeline-range" aria-hidden="true">
                       <span>−15.9 sec</span>
                       <span>Now</span>
                     </div>
