@@ -149,8 +149,8 @@ fn analyze_samples(samples: &[f32]) -> Vec<f32> {
         let low = SPECTRUM_MIN_HZ * ratio.powf(band_index as f32 / SPECTRUM_BAND_COUNT as f32);
         let high =
             SPECTRUM_MIN_HZ * ratio.powf((band_index + 1) as f32 / SPECTRUM_BAND_COUNT as f32);
-        let start = ((low / hz_per_bin).floor() as usize).max(1);
-        let end = ((high / hz_per_bin).ceil() as usize)
+        let start = ((low / hz_per_bin - 0.5).floor() as usize).max(1);
+        let end = ((high / hz_per_bin + 0.5).ceil() as usize)
             .max(start + 1)
             .min(spectrum.len() / 2);
         if end <= start {
@@ -158,12 +158,16 @@ fn analyze_samples(samples: &[f32]) -> Vec<f32> {
         }
         let power = spectrum[start..end]
             .iter()
-            .map(|value| {
+            .enumerate()
+            .map(|(offset, value)| {
+                let index = start + offset;
+                let bin_low = (index as f32 - 0.5) * hz_per_bin;
+                let bin_high = (index as f32 + 0.5) * hz_per_bin;
+                let overlap = (high.min(bin_high) - low.max(bin_low)).max(0.0);
                 let amplitude = (2.0 * value.norm() / FFT_SIZE as f32).max(1e-10);
-                amplitude * amplitude
+                amplitude * amplitude * overlap / hz_per_bin
             })
-            .sum::<f32>()
-            / (end - start) as f32;
+            .sum::<f32>();
         *value = (10.0 * power.max(1e-10).log10()).max(-100.0);
     }
     output
@@ -309,6 +313,35 @@ mod tests {
         assert!(
             peak.abs_diff(expected) <= 1,
             "peak {peak}, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn equal_sine_tones_have_similar_energy_across_the_spectrum() {
+        let frequencies = [70.312_5, 703.125, 4_007.812_5, 9_984.375, 14_976.562_5];
+        let levels: Vec<f32> = frequencies
+            .iter()
+            .map(|frequency| {
+                let samples: Vec<f32> = (0..FFT_SIZE)
+                    .map(|index| {
+                        (2.0 * std::f32::consts::PI * frequency * index as f32 / SAMPLE_RATE).sin()
+                    })
+                    .collect();
+                let spectrum = analyze_samples(&samples);
+                let power = spectrum
+                    .into_iter()
+                    .filter(|value| *value > -100.0)
+                    .map(|value| 10.0_f32.powf(value / 10.0))
+                    .sum::<f32>();
+                10.0 * power.log10()
+            })
+            .collect();
+        let lowest = levels.iter().copied().min_by(f32::total_cmp).unwrap();
+        let highest = levels.iter().copied().max_by(f32::total_cmp).unwrap();
+        assert!(
+            highest - lowest < 3.0,
+            "tone levels varied by {}dB: {levels:?}",
+            highest - lowest
         );
     }
 }

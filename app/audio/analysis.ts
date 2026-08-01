@@ -14,6 +14,8 @@ const LEVEL_THRESHOLDS = [-72, -60, -48, -36] as const;
 const EMA_ALPHA = 0.65;
 const SPECTRUM_MIN_HZ = 40;
 const SPECTRUM_MAX_HZ = 16_000;
+const SPECTRUM_FLOOR_DB = -100;
+const SPECTRUM_FLOOR_POWER = 10 ** (SPECTRUM_FLOOR_DB / 10);
 const LIVE_MIN_DB = -72;
 const LIVE_MAX_DB = -30;
 export const LIVE_RESPONSE_MS = [80, 140, 240, 400, 650, 1_000, 1_600] as const;
@@ -33,6 +35,26 @@ export const SPECTRUM_RANGES: ReadonlyArray<readonly [number, number]> =
     return [low, high] as const;
   });
 
+function dbPower(db: number): number {
+  if (!Number.isFinite(db) || db <= SPECTRUM_FLOOR_DB) return 0;
+  return 10 ** (db / 10);
+}
+
+function powerDb(power: number): number {
+  return Math.max(
+    SPECTRUM_FLOOR_DB,
+    10 * Math.log10(Math.max(power, SPECTRUM_FLOOR_POWER)),
+  );
+}
+
+function energyDb(values: Iterable<number>): number {
+  let totalPower = 0;
+  for (const db of values) {
+    totalPower += dbPower(db);
+  }
+  return powerDb(totalPower);
+}
+
 export function aggregateSpectrumData(
   frequencyDb: Float32Array,
   sampleRate: number,
@@ -40,24 +62,22 @@ export function aggregateSpectrumData(
 ): SpectrumDb {
   const hzPerBin = sampleRate / fftSize;
   return SPECTRUM_RANGES.map(([low, high]) => {
-    const start = Math.max(1, Math.floor(low / hzPerBin));
+    const start = Math.max(1, Math.floor(low / hzPerBin - 0.5));
     const end = Math.min(
       frequencyDb.length,
-      Math.max(start + 1, Math.ceil(high / hzPerBin)),
+      Math.max(start + 1, Math.ceil(high / hzPerBin + 0.5)),
     );
     let power = 0;
-    let count = 0;
     for (let index = start; index < end; index += 1) {
-      const db = Number.isFinite(frequencyDb[index])
-        ? frequencyDb[index]
-        : -100;
-      power += 10 ** (db / 10);
-      count += 1;
+      const binLow = (index - 0.5) * hzPerBin;
+      const binHigh = (index + 0.5) * hzPerBin;
+      const overlap = Math.max(
+        0,
+        Math.min(high, binHigh) - Math.max(low, binLow),
+      );
+      power += dbPower(frequencyDb[index]) * (overlap / hzPerBin);
     }
-    return Math.max(
-      -100,
-      10 * Math.log10(Math.max(power / Math.max(1, count), 1e-10)),
-    );
+    return powerDb(power);
   });
 }
 
@@ -68,10 +88,7 @@ export function aggregateTimelineBands(spectrumDb: SpectrumDb): BandDb {
       const center = Math.sqrt(rangeLow * rangeHigh);
       return center >= low && center < high;
     });
-    if (values.length === 0) return -100;
-    const power =
-      values.reduce((sum, db) => sum + 10 ** (db / 10), 0) / values.length;
-    return Math.max(-100, 10 * Math.log10(Math.max(power, 1e-10)));
+    return energyDb(values);
   }) as BandDb;
 }
 
@@ -83,15 +100,7 @@ export function aggregateLiveBands(spectrumDb: SpectrumDb): number[] {
     const end = Math.round(
       ((columnIndex + 1) * SPECTRUM_BAND_COUNT) / COLUMN_COUNT,
     );
-    let power = 0;
-    for (let index = start; index < end; index += 1) {
-      const db = Number.isFinite(spectrumDb[index]) ? spectrumDb[index] : -100;
-      power += 10 ** (db / 10);
-    }
-    return Math.max(
-      -100,
-      10 * Math.log10(Math.max(power / Math.max(1, end - start), 1e-10)),
-    );
+    return energyDb(spectrumDb.slice(start, end));
   });
 }
 
