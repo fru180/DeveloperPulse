@@ -91,7 +91,7 @@ jobs:
     name: Native quality
     needs: changes
     if: needs.changes.outputs.native == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
     env:
       CARGO_TERM_COLOR: always
