@@ -14,9 +14,9 @@
       {
         "title": "DeveloperPulse",
         "width": 1180,
-        "height": 520,
+        "height": 540,
         "minWidth": 720,
-        "minHeight": 500,
+        "minHeight": 540,
         "resizable": true
       }
     ],
