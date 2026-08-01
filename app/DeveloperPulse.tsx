@@ -26,6 +26,7 @@ import {
 import {
   BAND_LABELS,
   TIMELINE_INTERVAL_MS,
+  TIMELINE_WINDOW_SECONDS,
   type AnalysisSource,
   type BandDb,
   type CaptureState,
@@ -541,7 +542,7 @@ export function DeveloperPulse() {
                 <div className={`graph-footer ${mode}`}>
                   {mode === "timeline" ? (
                     <div className="timeline-range" aria-hidden="true">
-                      <span>−15.9 sec</span>
+                      <span>−{TIMELINE_WINDOW_SECONDS} sec</span>
                       <span>Now</span>
                     </div>
                   ) : (
