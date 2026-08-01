@@ -37,16 +37,16 @@ npm run tauri dev
 #### Web版
 
 1. 最新版のChromeでDeveloperPulseを開きます。
-2. **Start visualizing**を選択します。
+2. **Visualize audio**を選択します。
 3. 音声を再生しているタブを選び、**Share tab audio**を有効にして共有します。
-4. 終了するときは**Stop visualizing**を選択します。
+4. 終了するときは**Stop**を選択します。
 
 #### macOS版
 
-1. DeveloperPulseを起動し、**Start visualizing**を選択します。
+1. DeveloperPulseを起動し、**Visualize audio**を選択します。
 2. 初回のみ、macOSの**画面収録とシステムオーディオ録音**へのアクセスを許可します。
-3. 許可後に必要であればDeveloperPulseを再起動し、もう一度**Start visualizing**を選択します。
-4. 終了するときは**Stop visualizing**を選択します。
+3. 許可後に必要であればDeveloperPulseを再起動し、もう一度**Visualize audio**を選択します。
+4. 終了するときは**Stop**を選択します。
 
 ### 表示の調整
 
@@ -88,16 +88,16 @@ npm run tauri dev
 #### Web
 
 1. Open DeveloperPulse in the latest version of Chrome.
-2. Select **Start visualizing**.
+2. Select **Visualize audio**.
 3. Choose the tab playing audio, enable **Share tab audio**, and share it.
-4. Select **Stop visualizing** when you are finished.
+4. Select **Stop** when you are finished.
 
 #### macOS
 
-1. Open DeveloperPulse and select **Start visualizing**.
+1. Open DeveloperPulse and select **Visualize audio**.
 2. On first use, allow access to **Screen & System Audio Recording** in macOS.
-3. Restart DeveloperPulse if prompted, then select **Start visualizing** again.
-4. Select **Stop visualizing** when you are finished.
+3. Restart DeveloperPulse if prompted, then select **Visualize audio** again.
+4. Select **Stop** when you are finished.
 
 ### Display controls
 
