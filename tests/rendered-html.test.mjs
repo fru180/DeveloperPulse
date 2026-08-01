@@ -18,7 +18,7 @@ test("server-renders the DeveloperPulse experience", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
   assert.match(html, /<title>DeveloperPulse — System audio, visualized<\/title>/i);
-  assert.match(html, /Start listening/);
+  assert.match(html, /Start visualizing/);
   assert.match(html, /Local processing only/);
   assert.match(html, /<html[^>]+data-theme="light"/i);
   assert.match(html, /src="\/theme-init\.js"/i);

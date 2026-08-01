@@ -15,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`, select **Start listening**, choose a Chrome tab,
+Open `http://localhost:3000`, select **Start visualizing**, choose a Chrome tab,
 and enable **Share tab audio**. Audio is analyzed in the browser and is never
 recorded or uploaded.
 
