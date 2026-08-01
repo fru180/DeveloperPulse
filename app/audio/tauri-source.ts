@@ -1,8 +1,6 @@
 import { CaptureError, type AnalysisFrame, type AnalysisSource } from "./types";
 
 export class MacSystemAudioSource implements AnalysisSource {
-  readonly label = "Mac system audio";
-
   async start(onFrame: Parameters<AnalysisSource["start"]>[0]) {
     try {
       const [{ invoke }, { Channel }] = await Promise.all([

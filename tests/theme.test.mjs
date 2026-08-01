@@ -18,6 +18,10 @@ const globalsCssSource = await readFile(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
+const developerPulseSource = await readFile(
+  new URL("../app/DeveloperPulse.tsx", import.meta.url),
+  "utf8",
+);
 
 function runThemeInitializer(savedTheme, storageThrows = false) {
   const root = { dataset: {}, style: {} };
@@ -94,8 +98,27 @@ test("falls back to light when theme storage is unavailable", () => {
   assert.equal(meta.content, "#f6f8fa");
 });
 
-test("keeps the timeline mode grid separate from its range labels", () => {
+test("places horizontal axis values above the grid and meaning below it", () => {
   assert.match(globalsCssSource, /\.canvas-stage\s*\{[^}]*display:\s*grid;/s);
   assert.doesNotMatch(globalsCssSource, /(?:^|\n)\.timeline\s*\{/);
-  assert.match(globalsCssSource, /\.timeline-range\s*\{[^}]*display:\s*flex;/s);
+  assert.match(
+    globalsCssSource,
+    /\.graph-value-axis\s*\{[^}]*display:\s*flex;/s,
+  );
+  assert.match(globalsCssSource, /\.graph-footer\s*\{[^}]*display:\s*flex;/s);
+  assert.match(
+    developerPulseSource,
+    /className=\{`graph-value-axis \$\{mode\}`\}[\s\S]*−\{TIMELINE_WINDOW_SECONDS\} sec[\s\S]*TIMELINE_INTERMEDIATE_TICKS\.map[\s\S]*Now[\s\S]*<canvas[\s\S]*className="axis-name"[\s\S]*"Time"/,
+  );
+});
+
+test("keeps the display mode control at the bottom-right", () => {
+  assert.match(
+    globalsCssSource,
+    /\.mode-control\s*\{[^}]*margin-left:\s*auto;[^}]*display:\s*flex;/s,
+  );
+  assert.match(
+    globalsCssSource,
+    /@media\s*\(max-width:\s*720px\)[\s\S]*\.mode-control\s*\{[^}]*order:\s*4;/s,
+  );
 });

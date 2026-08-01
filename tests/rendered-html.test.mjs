@@ -28,15 +28,23 @@ test("server-renders the DeveloperPulse experience", async () => {
   assert.match(html, /<html[^>]+data-theme="light"/i);
   assert.match(html, /src="\/theme-init\.js"/i);
   assert.match(html, /Switch to dark mode/);
-  assert.match(html, /taller columns indicate stronger attacks/);
+  assert.match(html, /taller columns indicate more sudden rises in audio/);
   assert.match(html, /Frequency/);
-  assert.match(html, /Strong/);
-  assert.match(html, /Medium/);
-  assert.match(html, /Soft/);
+  assert.match(html, /Sudden/);
+  assert.match(html, /Rising/);
+  assert.match(html, /Steady/);
+  assert.doesNotMatch(html, /\b(?:Strong|Medium|Soft)\b/);
   assert.match(html, /Quiet/);
   assert.match(html, /Loud/);
   assert.match(html, /Live Cells/);
   assert.match(html, /Timeline/);
+  assert.match(html, /Display mode/);
+  assert.doesNotMatch(
+    html,
+    /class="control-label visually-hidden">\s*Visualizer mode/,
+  );
+  assert.doesNotMatch(html, /Toggle fullscreen/);
+  assert.doesNotMatch(html, /state-detail|Chrome tab audio/);
   assert.doesNotMatch(html, /Pulse Cyan|Heat Amber/);
   assert.doesNotMatch(
     html,

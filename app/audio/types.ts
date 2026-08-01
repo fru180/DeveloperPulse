@@ -41,7 +41,6 @@ export interface AnalysisFrame {
 }
 
 export interface AnalysisSource {
-  readonly label: string;
   start(
     onFrame: (frame: AnalysisFrame) => void,
     onEnded: (message?: string) => void,

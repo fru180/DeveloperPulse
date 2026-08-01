@@ -55,7 +55,8 @@ const LIVE_FREQUENCY_TICKS = [
   { label: "10k", minor: true },
   { label: "16k", minor: false },
 ] as const;
-const ATTACK_LABELS = ["Strong", "", "", "Medium", "", "", "Soft"] as const;
+const TIMELINE_INTERMEDIATE_TICKS = [20, 15, 10, 5] as const;
+const ATTACK_LABELS = ["Sudden", "", "", "Rising", "", "", "Steady"] as const;
 
 function LevelLegend() {
   return (
@@ -168,7 +169,6 @@ function renderLiveCells(
 
 export function DeveloperPulse() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
   const timelineSmoothRef = useRef<BandDb | null>(null);
   const previousTransientBandsRef = useRef<number[] | null>(null);
   const previousAnalysisAtRef = useRef<number | null>(null);
@@ -411,22 +411,14 @@ export function DeveloperPulse() {
     }
   }, [source, stop]);
 
-  const status = useMemo(() => {
-    if (state === "requesting")
-      return [
-        "Waiting for permission",
-        desktop ? "Allow system audio capture" : "Choose a tab with audio",
-      ];
-    if (state === "running") return ["Listening", source.label];
-    if (state === "error")
-      return ["Capture unavailable", "Check the message below and retry"];
-    return ["Ready", desktop ? "Mac system audio" : "Chrome tab audio"];
-  }, [desktop, source.label, state]);
-
-  const toggleFullscreen = async () => {
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await panelRef.current?.requestFullscreen();
-  };
+  const status =
+    state === "requesting"
+      ? "Waiting for permission"
+      : state === "running"
+        ? "Listening"
+        : state === "error"
+          ? "Capture unavailable"
+          : "Ready";
 
   const toggleTheme = () => {
     const nextTheme: Theme = theme === "light" ? "dark" : "light";
@@ -489,7 +481,6 @@ export function DeveloperPulse() {
       <section className="workspace">
         <section
           className="visualizer-panel"
-          ref={panelRef}
           aria-label="Audio frequency visualizer"
         >
           <div className="panel-head">
@@ -497,10 +488,7 @@ export function DeveloperPulse() {
               <span
                 className={`state-light ${state === "running" ? "running" : ""}`}
               />
-              <span className="state-copy">
-                <span className="state-title">{status[0]}</span>
-                <span className="state-detail">{status[1]}</span>
-              </span>
+              <span className="state-title">{status}</span>
             </div>
             <span className="live-clock">{elapsed}</span>
           </div>
@@ -520,33 +508,48 @@ export function DeveloperPulse() {
                 )}
               </div>
               <div className="canvas-column">
-                {mode === "live-cells" && (
-                  <div className="live-frequency-axis" aria-hidden="true">
-                    {LIVE_FREQUENCY_TICKS.map(({ label, minor }) => (
+                <div className={`graph-value-axis ${mode}`} aria-hidden="true">
+                  {mode === "live-cells" ? (
+                    LIVE_FREQUENCY_TICKS.map(({ label, minor }) => (
                       <span className={minor ? "minor" : undefined} key={label}>
                         {label}
                       </span>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <>
+                      <span className="timeline-tick" style={{ left: 0 }}>
+                        −{TIMELINE_WINDOW_SECONDS} sec
+                      </span>
+                      {TIMELINE_INTERMEDIATE_TICKS.map((seconds) => (
+                        <span
+                          className="timeline-tick"
+                          key={seconds}
+                          style={{
+                            left: `${((TIMELINE_WINDOW_SECONDS - seconds) / TIMELINE_WINDOW_SECONDS) * 100}%`,
+                          }}
+                        >
+                          −{seconds}
+                        </span>
+                      ))}
+                      <span className="timeline-tick" style={{ left: "100%" }}>
+                        Now
+                      </span>
+                    </>
+                  )}
+                </div>
                 <canvas
                   ref={canvasRef}
                   className="spectrum-canvas"
                   aria-label={
                     mode === "live-cells"
-                      ? "53 frequency columns; brighter cells indicate louder audio and taller columns indicate stronger attacks"
+                      ? "53 frequency columns; brighter cells indicate louder audio and taller columns indicate more sudden rises in audio"
                       : "53 columns of time by 7 frequency bands; brighter cells indicate louder audio"
                   }
                 />
                 <div className={`graph-footer ${mode}`}>
-                  {mode === "timeline" ? (
-                    <div className="timeline-range" aria-hidden="true">
-                      <span>−{TIMELINE_WINDOW_SECONDS} sec</span>
-                      <span>Now</span>
-                    </div>
-                  ) : (
-                    <span className="axis-name">Frequency</span>
-                  )}
+                  <span className="axis-name">
+                    {mode === "timeline" ? "Time" : "Frequency"}
+                  </span>
                   <LevelLegend />
                 </div>
               </div>
@@ -595,10 +598,8 @@ export function DeveloperPulse() {
                 {sensitivity}dB
               </span>
             </label>
-            <label>
-              <span className="control-label visually-hidden">
-                Visualizer mode
-              </span>
+            <label className="mode-control">
+              <span className="control-label">Display mode</span>
               <select
                 className="select-control"
                 value={mode}
@@ -610,14 +611,6 @@ export function DeveloperPulse() {
                 <option value="timeline">Timeline</option>
               </select>
             </label>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Toggle fullscreen"
-              onClick={() => void toggleFullscreen()}
-            >
-              <span className="fullscreen-glyph" aria-hidden="true" />
-            </button>
           </div>
         </section>
         <p className="panel-footnote">
