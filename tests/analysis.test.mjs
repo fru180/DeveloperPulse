@@ -19,13 +19,40 @@ import {
   smoothBands,
 } from "../app/audio/analysis.ts";
 import {
-  calculateLiveCellLayout,
+  calculateCellGridLayout,
   LIVE_CELL_COLUMNS,
   LIVE_CELL_ROWS,
 } from "../app/live-cell-layout.ts";
+import { createIdlePreviewGrid } from "../app/idle-preview.ts";
 
-test("sizes the live canvas to the exact height of its square-cell grid", () => {
-  const layout = calculateLiveCellLayout(1_000);
+test("creates a weighted 53 by 7 idle preview from the supplied random values", () => {
+  const values = [0, 0.549, 0.55, 0.769, 0.77, 0.899, 0.9, 0.969, 0.97, 0.999];
+  let index = 0;
+  const grid = createIdlePreviewGrid(
+    () => values[Math.min(index++, values.length - 1)],
+  );
+
+  assert.equal(grid.length, 53);
+  assert.ok(grid.every((column) => column.length === 7));
+  assert.deepEqual(grid.flat().slice(0, 10), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
+  assert.ok(grid.flat().every((level) => level >= 0 && level <= 4));
+});
+
+test("can generate distinct dark and bright idle previews", () => {
+  assert.ok(
+    createIdlePreviewGrid(() => 0)
+      .flat()
+      .every((level) => level === 0),
+  );
+  assert.ok(
+    createIdlePreviewGrid(() => 0.999)
+      .flat()
+      .every((level) => level === 4),
+  );
+});
+
+test("sizes both canvas modes to the exact height of their square-cell grid", () => {
+  const layout = calculateCellGridLayout(1_000);
   assert.ok(Math.abs(layout.gridWidth - 1_000) < 0.0001);
   assert.equal(
     layout.gridHeight,
@@ -37,9 +64,9 @@ test("sizes the live canvas to the exact height of its square-cell grid", () => 
   );
 });
 
-test("keeps live-cell layout stable across device pixel ratios", () => {
-  const cssLayout = calculateLiveCellLayout(720);
-  const retinaLayout = calculateLiveCellLayout(1_440, 2);
+test("keeps the shared cell-grid layout stable across device pixel ratios", () => {
+  const cssLayout = calculateCellGridLayout(720);
+  const retinaLayout = calculateCellGridLayout(1_440, 2);
   assert.ok(Math.abs(retinaLayout.cellSize / 2 - cssLayout.cellSize) < 0.0001);
   assert.ok(
     Math.abs(retinaLayout.gridHeight / 2 - cssLayout.gridHeight) < 0.0001,

@@ -12,6 +12,12 @@
 npm install
 ```
 
+## Engineering principles
+
+- Always obtain the user's approval before changing direction from the original plan.
+- When considering improvements, pursue a root-cause solution instead of an ad hoc minimal fix.
+- When implementing tests, cover the necessary and sufficient scenarios without writing tests that over-constrain behavior.
+
 ## Web development
 
 ```sh
