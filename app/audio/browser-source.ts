@@ -12,8 +12,6 @@ type ChromeDisplayMediaTrackConstraints = MediaTrackConstraints & {
 };
 
 export class BrowserTabSource implements AnalysisSource {
-  readonly label = "Shared tab audio";
-
   private stream: MediaStream | null = null;
   private context: AudioContext | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
