@@ -4,7 +4,6 @@ import {
   ROW_COUNT,
   SPECTRUM_BAND_COUNT,
   type BandDb,
-  type CellProfile,
   type Intensity,
   type IntensityColumn,
   type SpectrumDb,
@@ -18,10 +17,11 @@ const SPECTRUM_FLOOR_DB = -100;
 const SPECTRUM_FLOOR_POWER = 10 ** (SPECTRUM_FLOOR_DB / 10);
 const LIVE_MIN_DB = -72;
 const LIVE_MAX_DB = -30;
-export const LIVE_RESPONSE_MS = [80, 140, 240, 400, 650, 1_000, 1_600] as const;
-export const PEAK_DECAY_MS = 180;
-export const PEAK_TRIGGER = 0.82;
-export const PEAK_REARM = 0.55;
+const LIVE_VISIBLE_THRESHOLD = 0.1;
+const LIVE_ATTACK_FLOOR_DB = 1.5;
+const LIVE_ATTACK_RANGE_DB = 10;
+export const LIVE_ATTACK_HOLD_MS = 80;
+export const LIVE_ATTACK_DECAY_MS = 280;
 
 export const SPECTRUM_RANGES: ReadonlyArray<readonly [number, number]> =
   Array.from({ length: SPECTRUM_BAND_COUNT }, (_, index) => {
@@ -140,84 +140,88 @@ export function pushColumn(
   return [...grid.slice(-(COLUMN_COUNT - 1)), column];
 }
 
-export function createCellProfiles(): CellProfile[] {
-  return Array.from({ length: COLUMN_COUNT * ROW_COUNT }, (_, id) => {
-    const rowIndex = Math.floor(id / COLUMN_COUNT);
-    return {
-      id,
-      columnIndex: id % COLUMN_COUNT,
-      responseMs: LIVE_RESPONSE_MS[rowIndex],
-    };
-  });
-}
-
-export function cellTargets(
-  profiles: CellProfile[],
+export function liveBandEnergies(
   liveBandsDb: number[],
   sensitivityDb: number,
 ): Float32Array {
-  const targets = new Float32Array(profiles.length);
-  profiles.forEach((profile, index) => {
-    const db = liveBandsDb[profile.columnIndex] ?? -100;
+  const energies = new Float32Array(COLUMN_COUNT);
+  energies.forEach((_, columnIndex) => {
+    const db = liveBandsDb[columnIndex] ?? -100;
     const adjustedDb = db + sensitivityDb;
-    targets[index] = Math.max(
+    energies[columnIndex] = Math.max(
       0,
       Math.min(1, (adjustedDb - LIVE_MIN_DB) / (LIVE_MAX_DB - LIVE_MIN_DB)),
     );
   });
-  return targets;
+  return energies;
 }
 
-export function cellPeakSignals(
-  profiles: CellProfile[],
+export function liveAttackSignals(
   liveBandsDb: number[],
   previousLiveBandsDb: number[] | null,
   sensitivityDb: number,
 ): Float32Array {
-  const signals = new Float32Array(profiles.length);
-  profiles.forEach((profile, index) => {
-    const db = liveBandsDb[profile.columnIndex] ?? -100;
-    const previous = previousLiveBandsDb?.[profile.columnIndex] ?? db;
+  const signals = new Float32Array(COLUMN_COUNT);
+  signals.forEach((_, columnIndex) => {
+    const db = liveBandsDb[columnIndex] ?? -100;
+    const previous = previousLiveBandsDb?.[columnIndex] ?? db;
     const adjustedDb = db + sensitivityDb;
-    const energy = Math.max(
-      0,
-      Math.min(1, (adjustedDb - LIVE_MIN_DB) / (LIVE_MAX_DB - LIVE_MIN_DB)),
-    );
-    const rise = Math.max(0, Math.min(1, (db - previous - 4) / 8));
     const audible = Math.max(0, Math.min(1, (adjustedDb - LIVE_MIN_DB) / 18));
-    const sustainedPeak = energy >= 0.9 ? energy : 0;
-    signals[index] = Math.max(sustainedPeak, rise * audible);
+    const attack = Math.max(
+      0,
+      Math.min(
+        1,
+        (db - previous - LIVE_ATTACK_FLOOR_DB) / LIVE_ATTACK_RANGE_DB,
+      ),
+    );
+    signals[columnIndex] = attack * audible;
   });
   return signals;
 }
 
-export function applyCellPeakSignals(
-  peaks: Float32Array,
-  armed: Uint8Array,
+export function applyLiveAttackSignals(
+  attacks: Float32Array,
+  holds: Float32Array,
   signals: Float32Array,
 ) {
   signals.forEach((signal, index) => {
-    if (signal >= PEAK_TRIGGER && armed[index]) {
-      peaks[index] = 1;
-      armed[index] = 0;
-    } else if (signal <= PEAK_REARM) {
-      armed[index] = 1;
+    if (signal > attacks[index]) {
+      attacks[index] = signal;
+      holds[index] = LIVE_ATTACK_HOLD_MS;
     }
   });
 }
 
-export function decayCellPeaks(peaks: Float32Array, deltaMs: number) {
-  let hasVisiblePeak = false;
-  for (let index = 0; index < peaks.length; index += 1) {
-    peaks[index] = Math.max(0, peaks[index] - deltaMs / PEAK_DECAY_MS);
-    if (peaks[index] > 0) hasVisiblePeak = true;
+export function decayLiveAttacks(
+  attacks: Float32Array,
+  holds: Float32Array,
+  deltaMs: number,
+) {
+  let hasVisibleAttack = false;
+  for (let index = 0; index < attacks.length; index += 1) {
+    const decayMs = Math.max(0, deltaMs - holds[index]);
+    holds[index] = Math.max(0, holds[index] - deltaMs);
+    attacks[index] = Math.max(
+      0,
+      attacks[index] - decayMs / LIVE_ATTACK_DECAY_MS,
+    );
+    if (attacks[index] > 0) hasVisibleAttack = true;
   }
-  return hasVisiblePeak;
+  return hasVisibleAttack;
 }
 
-export function activationToLiveIntensity(activation: number): Intensity {
-  if (activation < 0.1) return 0;
-  if (activation < 0.38) return 1;
-  if (activation < 0.68) return 2;
-  return 3;
+export function liveCellCount(energy: number, attack: number): number {
+  if (energy < LIVE_VISIBLE_THRESHOLD) return 0;
+  return Math.min(
+    ROW_COUNT,
+    1 + Math.round(Math.max(0, attack) * (ROW_COUNT - 1)),
+  );
+}
+
+export function energyToLiveIntensity(energy: number): Intensity {
+  if (energy < 0.1) return 0;
+  if (energy < 0.38) return 1;
+  if (energy < 0.68) return 2;
+  if (energy < 0.9) return 3;
+  return 4;
 }
