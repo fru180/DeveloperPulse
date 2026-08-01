@@ -1,45 +1,109 @@
 # DeveloperPulse
 
-A local-first system audio visualizer inspired by GitHub's contribution graph.
+DeveloperPulseは、再生中の音を53列×7行のセルでリアルタイムに表現するオーディオビジュアライザーです。音の周波数や強さに応じてセルの明るさが変化します。
 
-- **Live Cells** gives all 371 cells a fixed frequency, sensitivity, and pulse
-  response, then colors them from live audio.
-- **Timeline** keeps the original time-by-frequency contribution graph.
+DeveloperPulse is an audio visualizer that represents currently playing audio in a real-time 53 × 7 cell display. Cell brightness changes with the frequency and intensity of the sound.
 
-Both modes use the GitHub Green palette.
+## 日本語
 
-## Web
+### インストール
+
+Node.js 22.13.0以降が必要です。プロジェクトのディレクトリで次のコマンドを実行します。
 
 ```sh
 npm install
+```
+
+### 起動
+
+#### Web版
+
+```sh
 npm run dev
 ```
 
-Open `http://localhost:3000`, select **Start visualizing**, choose a Chrome tab,
-and enable **Share tab audio**. Audio is analyzed in the browser and is never
-recorded or uploaded.
+起動後、Chromeで`http://localhost:3000`を開きます。
 
-## macOS app
+#### macOS版
 
-Requires macOS 13+, Rust, and Xcode Command Line Tools.
+macOS 13以降、Rust、Xcode Command Line Toolsが必要です。
 
 ```sh
 npm run tauri dev
-npm run tauri build
 ```
 
-The first capture requires Screen & System Audio Recording permission. Restart
-DeveloperPulse after granting access. The local MVP build is unsigned.
+### 使い方
 
-## Checks
+#### Web版
+
+1. 最新版のChromeでDeveloperPulseを開きます。
+2. **Start visualizing**を選択します。
+3. 音声を再生しているタブを選び、**Share tab audio**を有効にして共有します。
+4. 終了するときは**Stop visualizing**を選択します。
+
+#### macOS版
+
+1. DeveloperPulseを起動し、**Start visualizing**を選択します。
+2. 初回のみ、macOSの**画面収録とシステムオーディオ録音**へのアクセスを許可します。
+3. 許可後に必要であればDeveloperPulseを再起動し、もう一度**Start visualizing**を選択します。
+4. 終了するときは**Stop visualizing**を選択します。
+
+### 表示の調整
+
+- **Live Cells**: 周波数ごとの音の強さと反応の違いを表示します。
+- **Timeline**: 周波数帯ごとの音の強さを時間の流れに沿って表示します。
+- **Sensitivity**: 音に対するセルの反応の強さを調整します。
+- 右端のボタンで全画面表示に切り替えられます。
+- 画面右上のボタンでライト表示とダーク表示を切り替えられます。
+
+## English
+
+### Installation
+
+Node.js 22.13.0 or later is required. Run the following command in the project directory:
 
 ```sh
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
-cargo test --manifest-path src-tauri/Cargo.toml
+npm install
 ```
 
-Run `npm run format` to format both the web and Rust codebases.
+### Launch
+
+#### Web
+
+```sh
+npm run dev
+```
+
+After the server starts, open `http://localhost:3000` in Chrome.
+
+#### macOS
+
+macOS 13 or later, Rust, and Xcode Command Line Tools are required.
+
+```sh
+npm run tauri dev
+```
+
+### How to use
+
+#### Web
+
+1. Open DeveloperPulse in the latest version of Chrome.
+2. Select **Start visualizing**.
+3. Choose the tab playing audio, enable **Share tab audio**, and share it.
+4. Select **Stop visualizing** when you are finished.
+
+#### macOS
+
+1. Open DeveloperPulse and select **Start visualizing**.
+2. On first use, allow access to **Screen & System Audio Recording** in macOS.
+3. Restart DeveloperPulse if prompted, then select **Start visualizing** again.
+4. Select **Stop visualizing** when you are finished.
+
+### Display controls
+
+- **Live Cells**: Shows audio intensity across frequencies and response times.
+- **Timeline**: Shows audio intensity by frequency band over time.
+- **Sensitivity**: Adjusts how strongly the cells react to audio.
+- Use the button on the right to enter or exit full screen.
+- Use the button in the upper-right corner to switch between light and dark modes.
