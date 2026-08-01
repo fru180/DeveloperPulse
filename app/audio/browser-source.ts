@@ -1,5 +1,11 @@
 import { aggregateSpectrumData } from "./analysis";
-import { CaptureError, UPDATE_INTERVAL_MS, type AnalysisSource } from "./types";
+import {
+  BROWSER_DETAIL_FFT_SIZE,
+  BROWSER_TRANSIENT_FFT_SIZE,
+  BROWSER_UPDATE_INTERVAL_MS,
+  CaptureError,
+  type AnalysisSource,
+} from "./types";
 
 type ChromeDisplayMediaTrackConstraints = MediaTrackConstraints & {
   suppressLocalAudioPlayback?: boolean;
@@ -73,27 +79,44 @@ export class BrowserTabSource implements AnalysisSource {
     this.context = new AudioContext();
     await this.context.resume();
     const source = this.context.createMediaStreamSource(this.stream);
-    const analyser = this.context.createAnalyser();
-    analyser.fftSize = 4096;
-    analyser.minDecibels = -100;
-    analyser.maxDecibels = -20;
-    analyser.smoothingTimeConstant = 0;
-    source.connect(analyser);
+    const detailAnalyser = this.context.createAnalyser();
+    detailAnalyser.fftSize = BROWSER_DETAIL_FFT_SIZE;
+    detailAnalyser.minDecibels = -100;
+    detailAnalyser.maxDecibels = -20;
+    detailAnalyser.smoothingTimeConstant = 0;
+    source.connect(detailAnalyser);
 
-    const values = new Float32Array(analyser.frequencyBinCount);
+    const transientAnalyser = this.context.createAnalyser();
+    transientAnalyser.fftSize = BROWSER_TRANSIENT_FFT_SIZE;
+    transientAnalyser.minDecibels = -100;
+    transientAnalyser.maxDecibels = -20;
+    transientAnalyser.smoothingTimeConstant = 0;
+    source.connect(transientAnalyser);
+
+    const detailValues = new Float32Array(detailAnalyser.frequencyBinCount);
+    const transientValues = new Float32Array(
+      transientAnalyser.frequencyBinCount,
+    );
     this.sequence = 0;
     this.timer = setInterval(() => {
-      analyser.getFloatFrequencyData(values);
+      detailAnalyser.getFloatFrequencyData(detailValues);
+      transientAnalyser.getFloatFrequencyData(transientValues);
+      const sampleRate = this.context?.sampleRate ?? 48_000;
       onFrame({
         sequence: this.sequence++,
         capturedAtMs: Date.now(),
         spectrumDb: aggregateSpectrumData(
-          values,
-          this.context?.sampleRate ?? 48_000,
-          analyser.fftSize,
+          detailValues,
+          sampleRate,
+          detailAnalyser.fftSize,
+        ),
+        transientSpectrumDb: aggregateSpectrumData(
+          transientValues,
+          sampleRate,
+          transientAnalyser.fftSize,
         ),
       });
-    }, UPDATE_INTERVAL_MS);
+    }, BROWSER_UPDATE_INTERVAL_MS);
   }
 
   async stop() {

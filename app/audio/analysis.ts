@@ -20,8 +20,13 @@ const LIVE_MAX_DB = -30;
 const LIVE_VISIBLE_THRESHOLD = 0.1;
 const LIVE_ATTACK_FLOOR_DB = 1.5;
 const LIVE_ATTACK_RANGE_DB = 10;
+export const LIVE_ENERGY_ATTACK_MS = 15;
+export const LIVE_ENERGY_RELEASE_MS = 180;
+export const LIVE_ATTACK_REFERENCE_MS = 50;
 export const LIVE_ATTACK_HOLD_MS = 80;
 export const LIVE_ATTACK_DECAY_MS = 280;
+const LIVE_ATTACK_MIN_INTERVAL_MS = 12.5;
+const LIVE_ATTACK_MAX_INTERVAL_MS = 100;
 
 export const SPECTRUM_RANGES: ReadonlyArray<readonly [number, number]> =
   Array.from({ length: SPECTRUM_BAND_COUNT }, (_, index) => {
@@ -156,11 +161,52 @@ export function liveBandEnergies(
   return energies;
 }
 
+export function updateLiveEnergies(
+  energies: Float32Array,
+  targets: Float32Array,
+  deltaMs: number,
+  running: boolean,
+) {
+  let hasVisibleCell = false;
+  for (let index = 0; index < energies.length; index += 1) {
+    const current = energies[index];
+    const target = running ? targets[index] : 0;
+    const duration =
+      target > current ? LIVE_ENERGY_ATTACK_MS : LIVE_ENERGY_RELEASE_MS;
+    const blend = 1 - Math.exp(-deltaMs / duration);
+    const next = current + (target - current) * blend;
+    energies[index] = next < 0.002 ? 0 : next;
+    if (energies[index] >= 0.05) hasVisibleCell = true;
+  }
+  return hasVisibleCell;
+}
+
+export function combineLiveEnergyTargets(
+  detailTargets: Float32Array,
+  transientTargets: Float32Array,
+  attackSignals: Float32Array,
+): Float32Array {
+  const targets = new Float32Array(COLUMN_COUNT);
+  targets.forEach((_, index) => {
+    const detail = detailTargets[index] ?? 0;
+    const transient = transientTargets[index] ?? detail;
+    const attack = Math.max(0, Math.min(1, attackSignals[index] ?? 0));
+    targets[index] = detail + Math.max(0, transient - detail) * attack;
+  });
+  return targets;
+}
+
 export function liveAttackSignals(
   liveBandsDb: number[],
   previousLiveBandsDb: number[] | null,
   sensitivityDb: number,
+  elapsedMs = LIVE_ATTACK_REFERENCE_MS,
 ): Float32Array {
+  const normalizedInterval = Math.max(
+    LIVE_ATTACK_MIN_INTERVAL_MS,
+    Math.min(LIVE_ATTACK_MAX_INTERVAL_MS, elapsedMs),
+  );
+  const riseScale = LIVE_ATTACK_REFERENCE_MS / normalizedInterval;
   const signals = new Float32Array(COLUMN_COUNT);
   signals.forEach((_, columnIndex) => {
     const db = liveBandsDb[columnIndex] ?? -100;
@@ -171,7 +217,8 @@ export function liveAttackSignals(
       0,
       Math.min(
         1,
-        (db - previous - LIVE_ATTACK_FLOOR_DB) / LIVE_ATTACK_RANGE_DB,
+        ((db - previous) * riseScale - LIVE_ATTACK_FLOOR_DB) /
+          LIVE_ATTACK_RANGE_DB,
       ),
     );
     signals[columnIndex] = attack * audible;

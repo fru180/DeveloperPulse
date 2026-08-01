@@ -12,7 +12,9 @@ export const BAND_LABELS = ["16k", "6k", "2.5k", "1k", "400", "150", "20"];
 export const COLUMN_COUNT = 53;
 export const ROW_COUNT = 7;
 export const SPECTRUM_BAND_COUNT = 64;
-export const UPDATE_INTERVAL_MS = 50;
+export const BROWSER_DETAIL_FFT_SIZE = 4_096;
+export const BROWSER_TRANSIENT_FFT_SIZE = 2_048;
+export const BROWSER_UPDATE_INTERVAL_MS = 25;
 export const TIMELINE_INTERVAL_MS = 500;
 export const TIMELINE_WINDOW_SECONDS =
   (COLUMN_COUNT * TIMELINE_INTERVAL_MS) / 1_000;
@@ -35,6 +37,7 @@ export interface AnalysisFrame {
   sequence: number;
   capturedAtMs: number;
   spectrumDb: SpectrumDb;
+  transientSpectrumDb?: SpectrumDb;
 }
 
 export interface AnalysisSource {
