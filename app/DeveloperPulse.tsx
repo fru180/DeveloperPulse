@@ -18,6 +18,10 @@ import {
 import { BrowserTabSource } from "./audio/browser-source";
 import { isTauriRuntime, MacSystemAudioSource } from "./audio/tauri-source";
 import {
+  calculateLiveCellLayout,
+  LIVE_CELL_COLUMNS,
+} from "./live-cell-layout";
+import {
   BAND_LABELS,
   TIMELINE_INTERVAL_MS,
   type AnalysisSource,
@@ -117,22 +121,14 @@ function renderLiveCells(
   const { context, width, height, ratio } = prepareCanvas(canvas);
   if (!context) return;
   context.clearRect(0, 0, width, height);
-  const columns = 53;
-  const rows = 7;
-  const gap = Math.max(2 * ratio, Math.min(5 * ratio, width / 250));
-  const cellSize = Math.min(
-    (width - gap * (columns - 1)) / columns,
-    (height - gap * (rows - 1)) / rows,
-  );
-  const gridWidth = cellSize * columns + gap * (columns - 1);
-  const gridHeight = cellSize * rows + gap * (rows - 1);
+  const { gap, cellSize, gridWidth, gridHeight } = calculateLiveCellLayout(width, ratio);
   const offsetX = (width - gridWidth) / 2;
   const offsetY = (height - gridHeight) / 2;
   const radius = Math.min(2.4 * ratio, cellSize * 0.24);
 
   activations.forEach((activation, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
+    const column = index % LIVE_CELL_COLUMNS;
+    const row = Math.floor(index / LIVE_CELL_COLUMNS);
     const x = offsetX + column * (cellSize + gap);
     const y = offsetY + row * (cellSize + gap);
     roundedCell(
@@ -215,12 +211,32 @@ export function DeveloperPulse() {
     else renderLiveCells(canvas, activationsRef.current, peaksRef.current);
   }, []);
 
+  const syncLiveGridHeight = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || modeRef.current !== "live-cells") return;
+    const stage = canvas.closest<HTMLElement>(".canvas-stage");
+    if (!stage) return;
+    const { gridHeight } = calculateLiveCellLayout(canvas.getBoundingClientRect().width);
+    stage.style.setProperty("--live-grid-height", `${gridHeight}px`);
+  }, []);
+
   useEffect(() => {
+    syncLiveGridHeight();
     drawCurrent();
-    const observer = new ResizeObserver(drawCurrent);
+    let resizeFrame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        syncLiveGridHeight();
+        drawCurrent();
+      });
+    });
     if (canvasRef.current) observer.observe(canvasRef.current);
-    return () => observer.disconnect();
-  }, [drawCurrent, grid, mode]);
+    return () => {
+      cancelAnimationFrame(resizeFrame);
+      observer.disconnect();
+    };
+  }, [drawCurrent, grid, mode, syncLiveGridHeight]);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -397,7 +413,7 @@ export function DeveloperPulse() {
               disabled={state === "requesting"}
               onClick={state === "running" ? () => void stop() : () => void start()}
             >
-              {state === "requesting" ? "Connecting…" : state === "running" ? "Stop listening" : "Start listening"}
+              {state === "requesting" ? "Connecting…" : state === "running" ? "Stop visualizing" : "Start visualizing"}
             </button>
             <span className="control-divider" />
             <label className="range-control">

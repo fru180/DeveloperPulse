@@ -17,6 +17,31 @@ import {
   pushColumn,
   smoothBands,
 } from "../app/audio/analysis.ts";
+import {
+  calculateLiveCellLayout,
+  LIVE_CELL_COLUMNS,
+  LIVE_CELL_ROWS,
+} from "../app/live-cell-layout.ts";
+
+test("sizes the live canvas to the exact height of its square-cell grid", () => {
+  const layout = calculateLiveCellLayout(1_000);
+  assert.ok(Math.abs(layout.gridWidth - 1_000) < 0.0001);
+  assert.equal(
+    layout.gridHeight,
+    layout.cellSize * LIVE_CELL_ROWS + layout.gap * (LIVE_CELL_ROWS - 1),
+  );
+  assert.equal(
+    layout.gridWidth,
+    layout.cellSize * LIVE_CELL_COLUMNS + layout.gap * (LIVE_CELL_COLUMNS - 1),
+  );
+});
+
+test("keeps live-cell layout stable across device pixel ratios", () => {
+  const cssLayout = calculateLiveCellLayout(720);
+  const retinaLayout = calculateLiveCellLayout(1_440, 2);
+  assert.ok(Math.abs(retinaLayout.cellSize / 2 - cssLayout.cellSize) < 0.0001);
+  assert.ok(Math.abs(retinaLayout.gridHeight / 2 - cssLayout.gridHeight) < 0.0001);
+});
 
 test("keeps timeline levels unchanged and reserves the brightest live level for peaks", () => {
   assert.equal(dbToIntensity(-90, 0), 0);
