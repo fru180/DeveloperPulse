@@ -46,6 +46,7 @@ jobs:
           fi
 
           if ! git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+            .cargo/config.toml \
             src-tauri/src src-tauri/Cargo.toml src-tauri/Cargo.lock \
             src-tauri/build.rs src-tauri/tauri.conf.json \
             src-tauri/capabilities src-tauri/Info.plist \
@@ -107,6 +108,25 @@ jobs:
 
       - name: Lint
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+
+      - name: Verify macOS linkage
+        run: |
+          cargo build --manifest-path src-tauri/Cargo.toml --bin developer-pulse
+
+          binary="src-tauri/target/debug/developer-pulse"
+          expected_minos="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("bundle", "macOS", "minimumSystemVersion")' src-tauri/tauri.conf.json)"
+          actual_minos="$(otool -l "$binary" | awk '$1 == "minos" { print $2; exit }')"
+
+          if [[ "$actual_minos" != "$expected_minos" ]]; then
+            echo "Expected macOS deployment target $expected_minos, got $actual_minos"
+            exit 1
+          fi
+
+          concurrency_library="$(otool -L "$binary" | awk '/libswift_Concurrency.dylib/ { print $1; exit }')"
+          if [[ "$concurrency_library" != "/usr/lib/swift/libswift_Concurrency.dylib" ]]; then
+            echo "Expected the system Swift Concurrency runtime, got $concurrency_library"
+            exit 1
+          fi
 
       - name: Test
         run: cargo test --manifest-path src-tauri/Cargo.toml
