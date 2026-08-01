@@ -34,7 +34,12 @@ DeveloperPulse after granting access. The local MVP build is unsigned.
 ## Checks
 
 ```sh
-npm test
+npm run format:check
 npm run lint
+npm run typecheck
+npm test
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
+
+Run `npm run format` to format both the web and Rust codebases.

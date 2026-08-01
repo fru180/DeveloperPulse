@@ -1,0 +1,11 @@
+node_modules
+.next
+.vinext
+dist
+desktop-dist
+build
+.wrangler
+outputs
+work
+next-env.d.ts
+src-tauri

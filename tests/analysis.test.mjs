@@ -40,7 +40,9 @@ test("keeps live-cell layout stable across device pixel ratios", () => {
   const cssLayout = calculateLiveCellLayout(720);
   const retinaLayout = calculateLiveCellLayout(1_440, 2);
   assert.ok(Math.abs(retinaLayout.cellSize / 2 - cssLayout.cellSize) < 0.0001);
-  assert.ok(Math.abs(retinaLayout.gridHeight / 2 - cssLayout.gridHeight) < 0.0001);
+  assert.ok(
+    Math.abs(retinaLayout.gridHeight / 2 - cssLayout.gridHeight) < 0.0001,
+  );
 });
 
 test("keeps timeline levels unchanged and reserves the brightest live level for peaks", () => {
@@ -67,9 +69,14 @@ test("aggregates FFT data into 64 logarithmic spectrum bands", () => {
   bins[Math.round(frequency / (sampleRate / fftSize))] = -20;
   const spectrum = aggregateSpectrumData(bins, sampleRate, fftSize);
   const peak = spectrum.indexOf(Math.max(...spectrum));
-  const expected = Math.floor(Math.log(frequency / 40) / Math.log(16_000 / 40) * 64);
+  const expected = Math.floor(
+    (Math.log(frequency / 40) / Math.log(16_000 / 40)) * 64,
+  );
   assert.equal(spectrum.length, 64);
-  assert.ok(Math.abs(peak - expected) <= 1, `peak ${peak}, expected ${expected}`);
+  assert.ok(
+    Math.abs(peak - expected) <= 1,
+    `peak ${peak}, expected ${expected}`,
+  );
   assert.equal(aggregateTimelineBands(spectrum).length, 7);
 });
 
@@ -95,8 +102,13 @@ test("generates 53 frequency columns by 7 ordered response rows", () => {
   assert.equal(first.length, 371);
   for (let row = 0; row < 7; row += 1) {
     const profiles = first.slice(row * 53, (row + 1) * 53);
-    assert.deepEqual(profiles.map((profile) => profile.columnIndex), Array.from({ length: 53 }, (_, index) => index));
-    assert.ok(profiles.every((profile) => profile.responseMs === LIVE_RESPONSE_MS[row]));
+    assert.deepEqual(
+      profiles.map((profile) => profile.columnIndex),
+      Array.from({ length: 53 }, (_, index) => index),
+    );
+    assert.ok(
+      profiles.every((profile) => profile.responseMs === LIVE_RESPONSE_MS[row]),
+    );
   }
 });
 
@@ -130,9 +142,7 @@ test("detects local peaks only in the assigned frequency column", () => {
 });
 
 test("applies sensitivity to local peak audibility", () => {
-  const profiles = [
-    { id: 0, columnIndex: 0, responseMs: 80 },
-  ];
+  const profiles = [{ id: 0, columnIndex: 0, responseMs: 80 }];
   const current = Array(53).fill(-100);
   current[0] = -45;
 

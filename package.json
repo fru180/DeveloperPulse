@@ -14,7 +14,14 @@
     "tauri": "tauri",
     "test": "npm run build && npm run test:unit && node --test tests/rendered-html.test.mjs",
     "test:unit": "node --experimental-strip-types --test tests/analysis.test.mjs tests/theme.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern desktop-dist --ignore-pattern .next --ignore-pattern build --ignore-pattern src-tauri/target"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern desktop-dist --ignore-pattern .next --ignore-pattern build --ignore-pattern src-tauri/target",
+    "typecheck": "tsc --noEmit --incremental false",
+    "format": "npm run format:web && npm run format:rust",
+    "format:check": "npm run format:web:check && npm run format:rust:check",
+    "format:web": "prettier --write .",
+    "format:web:check": "prettier --check .",
+    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
+    "format:rust:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
@@ -34,6 +41,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "prettier": "^3.9.6",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
