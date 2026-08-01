@@ -120,7 +120,7 @@ input:focus-visible {
 
 .workspace {
   width: min(1280px, 100%);
-  margin: auto;
+  margin: 0 auto;
   padding: 28px 0 10px;
 }
 
@@ -227,7 +227,7 @@ input:focus-visible {
 }
 
 .response-labels {
-  height: clamp(190px, 32vh, 280px);
+  height: var(--live-grid-height, clamp(190px, 32vh, 280px));
   margin-top: 22px;
 }
 
@@ -254,7 +254,7 @@ input:focus-visible {
 }
 
 .live-cells .spectrum-canvas {
-  height: clamp(190px, 32vh, 280px);
+  height: var(--live-grid-height, clamp(190px, 32vh, 280px));
 }
 
 .visually-hidden {
@@ -489,7 +489,7 @@ input:focus-visible {
   .frequency-labels,
   .spectrum-canvas { height: 220px; }
   .response-labels,
-  .live-cells .spectrum-canvas { height: 170px; }
+  .live-cells .spectrum-canvas { height: var(--live-grid-height, 170px); }
   .live-frequency-axis { font-size: 8px; }
   .live-frequency-axis .minor { display: none; }
   .graph-footer { font-size: 8px; }
