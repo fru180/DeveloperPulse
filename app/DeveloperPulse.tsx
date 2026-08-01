@@ -415,7 +415,7 @@ export function DeveloperPulse() {
     state === "requesting"
       ? "Waiting for permission"
       : state === "running"
-        ? "Listening"
+        ? "Live"
         : state === "error"
           ? "Capture unavailable"
           : "Ready";
@@ -447,35 +447,29 @@ export function DeveloperPulse() {
           </span>
           DeveloperPulse
         </div>
-        <div className="topbar-actions">
-          <div className="privacy-note">
-            <span className="privacy-dot" />
-            Local processing only
-          </div>
-          <button className="theme-toggle" type="button" onClick={toggleTheme}>
-            <svg
-              className="theme-icon theme-icon-moon"
-              viewBox="0 0 16 16"
-              aria-hidden="true"
-            >
-              <path d="M14 10.45A6.5 6.5 0 0 1 5.55 2 6.5 6.5 0 1 0 14 10.45Z" />
-            </svg>
-            <svg
-              className="theme-icon theme-icon-sun"
-              viewBox="0 0 16 16"
-              aria-hidden="true"
-            >
-              <circle cx="8" cy="8" r="3" />
-              <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06" />
-            </svg>
-            <span className="visually-hidden theme-label-dark">
-              Switch to dark mode
-            </span>
-            <span className="visually-hidden theme-label-light">
-              Switch to light mode
-            </span>
-          </button>
-        </div>
+        <button className="theme-toggle" type="button" onClick={toggleTheme}>
+          <svg
+            className="theme-icon theme-icon-moon"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <path d="M14 10.45A6.5 6.5 0 0 1 5.55 2 6.5 6.5 0 1 0 14 10.45Z" />
+          </svg>
+          <svg
+            className="theme-icon theme-icon-sun"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <circle cx="8" cy="8" r="3" />
+            <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06" />
+          </svg>
+          <span className="visually-hidden theme-label-dark">
+            Switch to dark mode
+          </span>
+          <span className="visually-hidden theme-label-light">
+            Switch to light mode
+          </span>
+        </button>
       </header>
 
       <section className="workspace">
@@ -556,7 +550,9 @@ export function DeveloperPulse() {
             </div>
             {state !== "running" && state !== "requesting" && (
               <div className="idle-overlay">
-                <span className="idle-message">Start to visualize</span>
+                <span className="idle-message">
+                  Your audio will appear here
+                </span>
               </div>
             )}
           </div>
@@ -579,8 +575,8 @@ export function DeveloperPulse() {
               {state === "requesting"
                 ? "Connecting…"
                 : state === "running"
-                  ? "Stop visualizing"
-                  : "Start visualizing"}
+                  ? "Stop"
+                  : "Visualize audio"}
             </button>
             <span className="control-divider" />
             <label className="range-control">

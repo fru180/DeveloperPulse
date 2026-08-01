@@ -28,6 +28,11 @@
   --contribution-2: #4ac26b;
   --contribution-3: #2da44e;
   --contribution-4: #116329;
+  --font-size-chart-mobile: 11px;
+  --font-size-compact: 12px;
+  --font-size-small: 13px;
+  --font-size-body: 14px;
+  --font-size-prominent: 16px;
 }
 
 :root[data-theme="dark"] {
@@ -115,7 +120,7 @@ input:focus-visible {
   align-items: center;
   gap: 11px;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 14px;
+  font-size: var(--font-size-prominent);
   font-weight: 650;
   letter-spacing: -0.02em;
 }
@@ -142,31 +147,6 @@ input:focus-visible {
 .brand-mark span:nth-child(2),
 .brand-mark span:nth-child(6) {
   opacity: 0.62;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.privacy-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 11px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.privacy-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.75);
 }
 
 .theme-toggle {
@@ -291,14 +271,14 @@ input:focus-visible {
 .state-title {
   display: block;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: 650;
 }
 
 .live-clock {
   color: var(--quiet);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
 
@@ -322,13 +302,13 @@ input:focus-visible {
   align-items: center;
   color: var(--quiet);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: var(--font-size-chart-mobile);
   text-align: right;
 }
 
 .attack-labels,
 .frequency-labels {
-  margin-top: 22px;
+  margin-top: 24px;
 }
 
 .canvas-column {
@@ -336,14 +316,14 @@ input:focus-visible {
 }
 
 .graph-value-axis {
-  height: 14px;
+  height: 16px;
   margin-bottom: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   color: var(--quiet);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: var(--font-size-chart-mobile);
   font-variant-numeric: tabular-nums;
 }
 
@@ -393,11 +373,12 @@ input:focus-visible {
   gap: 8px;
   color: var(--quiet);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: var(--font-size-compact);
   letter-spacing: 0.04em;
 }
 
 .axis-name {
+  font-size: var(--font-size-chart-mobile);
   text-transform: uppercase;
 }
 
@@ -452,7 +433,7 @@ input:focus-visible {
   background: var(--overlay);
   color: var(--muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   backdrop-filter: blur(8px);
 }
 
@@ -463,7 +444,7 @@ input:focus-visible {
   border-radius: 8px;
   background: var(--danger-muted);
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--font-size-body);
   line-height: 1.5;
 }
 
@@ -535,7 +516,7 @@ input:focus-visible {
 .control-label {
   color: var(--muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 10px;
+  font-size: var(--font-size-small);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -550,7 +531,7 @@ input:focus-visible {
   width: 38px;
   color: var(--foreground);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -575,7 +556,7 @@ input:focus-visible {
 .panel-footnote {
   margin: 10px 0 0;
   color: var(--quiet);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   line-height: 1.6;
   text-align: center;
 }
@@ -590,9 +571,6 @@ input:focus-visible {
   .app-shell {
     padding: 16px 12px 20px;
   }
-  .privacy-note {
-    display: none;
-  }
   .workspace {
     padding-top: 22px;
   }
@@ -601,26 +579,16 @@ input:focus-visible {
     padding-right: 12px;
   }
   .canvas-stage {
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: 46px minmax(0, 1fr);
     gap: 8px;
-  }
-  .frequency-labels,
-  .attack-labels {
-    font-size: 8px;
   }
   .attack-labels,
   .frequency-labels,
   .spectrum-canvas {
     height: var(--cell-grid-height, 170px);
   }
-  .graph-value-axis {
-    font-size: 8px;
-  }
   .graph-value-axis .minor {
     display: none;
-  }
-  .graph-footer {
-    font-size: 8px;
   }
   .legend-swatches > span {
     width: 9px;
