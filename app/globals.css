@@ -288,25 +288,11 @@ input:focus-visible {
   animation: breathe 2s ease-in-out infinite;
 }
 
-.state-copy {
-  min-width: 0;
-}
-
 .state-title {
   display: block;
   font-family: var(--font-geist-mono), monospace;
   font-size: 12px;
   font-weight: 650;
-}
-
-.state-detail {
-  display: block;
-  margin-top: 2px;
-  overflow: hidden;
-  color: var(--quiet);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .live-clock {
@@ -340,7 +326,8 @@ input:focus-visible {
   text-align: right;
 }
 
-.attack-labels {
+.attack-labels,
+.frequency-labels {
   margin-top: 22px;
 }
 
@@ -348,7 +335,7 @@ input:focus-visible {
   min-width: 0;
 }
 
-.live-frequency-axis {
+.graph-value-axis {
   height: 14px;
   margin-bottom: 8px;
   display: flex;
@@ -358,6 +345,26 @@ input:focus-visible {
   font-family: var(--font-geist-mono), monospace;
   font-size: 9px;
   font-variant-numeric: tabular-nums;
+}
+
+.graph-value-axis.timeline {
+  position: relative;
+  display: block;
+}
+
+.timeline-tick {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.timeline-tick:first-child {
+  transform: translateY(-50%);
+}
+
+.timeline-tick:last-child {
+  transform: translate(-100%, -50%);
 }
 
 .spectrum-canvas {
@@ -380,7 +387,9 @@ input:focus-visible {
 
 .graph-footer {
   margin-top: 10px;
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   color: var(--quiet);
   font-family: var(--font-geist-mono), monospace;
@@ -388,19 +397,7 @@ input:focus-visible {
   letter-spacing: 0.04em;
 }
 
-.graph-footer.live-cells {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .axis-name {
-  text-transform: uppercase;
-}
-
-.timeline-range {
-  display: flex;
-  justify-content: space-between;
   text-transform: uppercase;
 }
 
@@ -480,7 +477,6 @@ input:focus-visible {
 }
 
 .primary-button,
-.icon-button,
 .select-control {
   min-height: 38px;
   border: 1px solid var(--border-strong);
@@ -559,42 +555,21 @@ input:focus-visible {
   text-align: right;
 }
 
+.mode-control {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .select-control {
   padding: 0 32px 0 11px;
   color-scheme: inherit;
   cursor: pointer;
 }
 
-.icon-button {
-  width: 38px;
-  margin-left: auto;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.icon-button:hover,
 .select-control:hover {
   border-color: var(--muted);
-}
-
-.fullscreen-glyph {
-  width: 15px;
-  height: 15px;
-  position: relative;
-}
-
-.fullscreen-glyph::before,
-.fullscreen-glyph::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: solid currentColor;
-  border-width: 2px 0 0 2px;
-}
-
-.fullscreen-glyph::after {
-  transform: rotate(180deg);
 }
 
 .panel-footnote {
@@ -638,10 +613,10 @@ input:focus-visible {
   .spectrum-canvas {
     height: var(--cell-grid-height, 170px);
   }
-  .live-frequency-axis {
+  .graph-value-axis {
     font-size: 8px;
   }
-  .live-frequency-axis .minor {
+  .graph-value-axis .minor {
     display: none;
   }
   .graph-footer {
@@ -664,8 +639,8 @@ input:focus-visible {
   .range-control input {
     flex: 1;
   }
-  .icon-button {
-    margin-left: 0;
+  .mode-control {
+    order: 4;
   }
 }
 
