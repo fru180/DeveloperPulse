@@ -24,10 +24,10 @@ import {
   updateLiveEnergies,
 } from "../app/audio/analysis.ts";
 import {
+  ANALYSIS_UPDATE_INTERVAL_MS,
   BAND_RANGES,
-  BROWSER_DETAIL_FFT_SIZE,
-  BROWSER_TRANSIENT_FFT_SIZE,
-  BROWSER_UPDATE_INTERVAL_MS,
+  DETAIL_FFT_SIZE,
+  TRANSIENT_FFT_SIZE,
 } from "../app/audio/types.ts";
 import {
   calculateCellGridLayout,
@@ -102,7 +102,7 @@ test("keeps the existing timeline at exactly 53 columns", () => {
 });
 
 test("aggregates FFT data into 64 logarithmic spectrum bands", () => {
-  const fftSize = BROWSER_DETAIL_FFT_SIZE;
+  const fftSize = DETAIL_FFT_SIZE;
   const sampleRate = 48_000;
   const frequency = 700;
   const bins = new Float32Array(fftSize / 2).fill(-100);
@@ -125,7 +125,7 @@ test("starts the lowest timeline band at the 40Hz analysis floor", () => {
 });
 
 test("keeps equal FFT components equally strong across the spectrum", () => {
-  const fftSize = BROWSER_DETAIL_FFT_SIZE;
+  const fftSize = DETAIL_FFT_SIZE;
   const sampleRate = 48_000;
   for (const frequency of [50, 630, 1_600, 10_000, 15_000]) {
     const bins = new Float32Array(fftSize / 2).fill(-100);
@@ -162,7 +162,7 @@ test("sums energy when analysis bands are combined", () => {
 });
 
 test("does not accumulate the analysis floor as band energy", () => {
-  const fftSize = BROWSER_DETAIL_FFT_SIZE;
+  const fftSize = DETAIL_FFT_SIZE;
   const bins = new Float32Array(fftSize / 2).fill(-100);
   const spectrum = aggregateSpectrumData(bins, 48_000, fftSize);
 
@@ -171,12 +171,12 @@ test("does not accumulate the analysis floor as band energy", () => {
   assert.ok(aggregateTimelineBands(spectrum).every((db) => db === -100));
 });
 
-test("keeps browser FFT peaks ordered across common sample rates", () => {
-  assert.equal(BROWSER_DETAIL_FFT_SIZE, 4_096);
-  assert.equal(BROWSER_TRANSIENT_FFT_SIZE, 2_048);
-  assert.equal(BROWSER_UPDATE_INTERVAL_MS, 25);
+test("keeps shared FFT peaks ordered across common sample rates", () => {
+  assert.equal(DETAIL_FFT_SIZE, 4_096);
+  assert.equal(TRANSIENT_FFT_SIZE, 2_048);
+  assert.equal(ANALYSIS_UPDATE_INTERVAL_MS, 25);
 
-  for (const fftSize of [BROWSER_DETAIL_FFT_SIZE, BROWSER_TRANSIENT_FFT_SIZE]) {
+  for (const fftSize of [DETAIL_FFT_SIZE, TRANSIENT_FFT_SIZE]) {
     for (const sampleRate of [44_100, 48_000]) {
       const peakColumns = [50, 100, 630, 1_600, 10_000, 15_000].map(
         (frequency) => {

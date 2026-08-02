@@ -1,9 +1,9 @@
 import { aggregateSpectrumData } from "./analysis";
 import {
-  BROWSER_DETAIL_FFT_SIZE,
-  BROWSER_TRANSIENT_FFT_SIZE,
-  BROWSER_UPDATE_INTERVAL_MS,
+  ANALYSIS_UPDATE_INTERVAL_MS,
   CaptureError,
+  DETAIL_FFT_SIZE,
+  TRANSIENT_FFT_SIZE,
   type AnalysisSource,
 } from "./types";
 
@@ -78,14 +78,14 @@ export class BrowserTabSource implements AnalysisSource {
     await this.context.resume();
     const source = this.context.createMediaStreamSource(this.stream);
     const detailAnalyser = this.context.createAnalyser();
-    detailAnalyser.fftSize = BROWSER_DETAIL_FFT_SIZE;
+    detailAnalyser.fftSize = DETAIL_FFT_SIZE;
     detailAnalyser.minDecibels = -100;
     detailAnalyser.maxDecibels = -20;
     detailAnalyser.smoothingTimeConstant = 0;
     source.connect(detailAnalyser);
 
     const transientAnalyser = this.context.createAnalyser();
-    transientAnalyser.fftSize = BROWSER_TRANSIENT_FFT_SIZE;
+    transientAnalyser.fftSize = TRANSIENT_FFT_SIZE;
     transientAnalyser.minDecibels = -100;
     transientAnalyser.maxDecibels = -20;
     transientAnalyser.smoothingTimeConstant = 0;
@@ -114,7 +114,7 @@ export class BrowserTabSource implements AnalysisSource {
           transientAnalyser.fftSize,
         ),
       });
-    }, BROWSER_UPDATE_INTERVAL_MS);
+    }, ANALYSIS_UPDATE_INTERVAL_MS);
   }
 
   async stop() {

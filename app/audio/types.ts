@@ -11,9 +11,9 @@ export const BAND_RANGES = [
 export const COLUMN_COUNT = 53;
 export const ROW_COUNT = 7;
 export const SPECTRUM_BAND_COUNT = 64;
-export const BROWSER_DETAIL_FFT_SIZE = 4_096;
-export const BROWSER_TRANSIENT_FFT_SIZE = 2_048;
-export const BROWSER_UPDATE_INTERVAL_MS = 25;
+export const DETAIL_FFT_SIZE = 4_096;
+export const TRANSIENT_FFT_SIZE = 2_048;
+export const ANALYSIS_UPDATE_INTERVAL_MS = 25;
 export const TIMELINE_INTERVAL_MS = 500;
 export const TIMELINE_WINDOW_SECONDS =
   (COLUMN_COUNT * TIMELINE_INTERVAL_MS) / 1_000;

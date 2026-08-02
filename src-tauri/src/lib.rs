@@ -1,18 +1,22 @@
-use rustfft::{num_complex::Complex32, FftPlanner};
+use rustfft::{num_complex::Complex32, Fft, FftPlanner};
 use screencapturekit::cm::AudioBufferList;
 use screencapturekit::error::{SCError, SCStreamErrorCode};
 use screencapturekit::prelude::*;
 use serde::Serialize;
 use std::{
     collections::VecDeque,
-    sync::{mpsc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{ipc::Channel, AppHandle, State};
 
-const FFT_SIZE: usize = 4096;
+const DETAIL_FFT_SIZE: usize = 4096;
+const TRANSIENT_FFT_SIZE: usize = 2048;
 const SAMPLE_RATE: f32 = 48_000.0;
+const ANALYSIS_UPDATE_INTERVAL_MS: usize = 25;
+const ANALYSIS_UPDATE_SAMPLE_COUNT: usize =
+    SAMPLE_RATE as usize * ANALYSIS_UPDATE_INTERVAL_MS / 1_000;
 const SPECTRUM_BAND_COUNT: usize = 64;
 const SPECTRUM_MIN_HZ: f32 = 40.0;
 const SPECTRUM_MAX_HZ: f32 = 16_000.0;
@@ -23,6 +27,7 @@ struct AnalysisFrame {
     sequence: u64,
     captured_at_ms: u128,
     spectrum_db: Vec<f32>,
+    transient_spectrum_db: Vec<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -75,34 +80,43 @@ struct CaptureState(Mutex<Option<CaptureSession>>);
 
 struct SpectrumAnalyzer {
     samples: VecDeque<f32>,
-    last_emit: Instant,
+    samples_since_emit: usize,
     sequence: u64,
     on_message: Channel<AnalysisFrame>,
+    detail_transform: SpectrumTransform,
+    transient_transform: SpectrumTransform,
 }
 
 impl SpectrumAnalyzer {
     fn new(on_message: Channel<AnalysisFrame>) -> Self {
+        let mut planner = FftPlanner::<f32>::new();
         Self {
-            samples: VecDeque::with_capacity(FFT_SIZE),
-            last_emit: Instant::now(),
+            samples: VecDeque::with_capacity(DETAIL_FFT_SIZE),
+            samples_since_emit: ANALYSIS_UPDATE_SAMPLE_COUNT,
             sequence: 0,
             on_message,
+            detail_transform: SpectrumTransform::new(DETAIL_FFT_SIZE, &mut planner),
+            transient_transform: SpectrumTransform::new(TRANSIENT_FFT_SIZE, &mut planner),
         }
     }
 
     fn push(&mut self, samples: &[f32]) {
         for &sample in samples {
-            if self.samples.len() == FFT_SIZE {
+            if self.samples.len() == DETAIL_FFT_SIZE {
                 self.samples.pop_front();
             }
             self.samples.push_back(sample);
         }
 
-        if self.samples.len() < FFT_SIZE || self.last_emit.elapsed() < Duration::from_millis(50) {
+        if self.samples.is_empty()
+            || !analysis_update_due(&mut self.samples_since_emit, samples.len())
+        {
             return;
         }
 
-        let spectrum_db = analyze_samples(self.samples.make_contiguous());
+        let recent_samples = self.samples.make_contiguous();
+        let spectrum_db = self.detail_transform.analyze_recent(recent_samples);
+        let transient_spectrum_db = self.transient_transform.analyze_recent(recent_samples);
         let captured_at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -111,10 +125,19 @@ impl SpectrumAnalyzer {
             sequence: self.sequence,
             captured_at_ms,
             spectrum_db,
+            transient_spectrum_db,
         });
         self.sequence += 1;
-        self.last_emit = Instant::now();
     }
+}
+
+fn analysis_update_due(samples_since_emit: &mut usize, new_samples: usize) -> bool {
+    *samples_since_emit = samples_since_emit.saturating_add(new_samples);
+    if *samples_since_emit < ANALYSIS_UPDATE_SAMPLE_COUNT {
+        return false;
+    }
+    *samples_since_emit %= ANALYSIS_UPDATE_SAMPLE_COUNT;
+    true
 }
 
 struct AudioHandler {
@@ -169,21 +192,75 @@ fn downmix_audio(buffers: &AudioBufferList) -> Vec<f32> {
         .collect()
 }
 
-fn analyze_samples(samples: &[f32]) -> Vec<f32> {
-    let mut planner = FftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(FFT_SIZE);
-    let mut spectrum: Vec<Complex32> = samples
-        .iter()
-        .enumerate()
-        .map(|(index, sample)| {
-            let window = 0.5
-                - 0.5 * (2.0 * std::f32::consts::PI * index as f32 / (FFT_SIZE - 1) as f32).cos();
-            Complex32::new(sample * window, 0.0)
-        })
-        .collect();
-    fft.process(&mut spectrum);
+struct SpectrumTransform {
+    fft_size: usize,
+    fft: Arc<dyn Fft<f32>>,
+    window: Vec<f32>,
+    spectrum: Vec<Complex32>,
+    scratch: Vec<Complex32>,
+    frequency_db: Vec<f32>,
+}
 
-    let hz_per_bin = SAMPLE_RATE / FFT_SIZE as f32;
+impl SpectrumTransform {
+    fn new(fft_size: usize, planner: &mut FftPlanner<f32>) -> Self {
+        let fft = planner.plan_fft_forward(fft_size);
+        let alpha = 0.16_f32;
+        let a0 = (1.0 - alpha) / 2.0;
+        let a1 = 0.5;
+        let a2 = alpha / 2.0;
+        let window = (0..fft_size)
+            .map(|index| {
+                let phase = 2.0 * std::f32::consts::PI * index as f32 / fft_size as f32;
+                a0 - a1 * phase.cos() + a2 * (2.0 * phase).cos()
+            })
+            .collect();
+        let scratch = vec![Complex32::default(); fft.get_inplace_scratch_len()];
+        Self {
+            fft_size,
+            fft,
+            window,
+            spectrum: vec![Complex32::default(); fft_size],
+            scratch,
+            frequency_db: vec![f32::NEG_INFINITY; fft_size / 2],
+        }
+    }
+
+    fn analyze_recent(&mut self, samples: &[f32]) -> Vec<f32> {
+        let retained = samples.len().min(self.fft_size);
+        let source_start = samples.len() - retained;
+        let target_start = self.fft_size - retained;
+        self.spectrum.fill(Complex32::default());
+        for (target, (sample, window)) in self.spectrum[target_start..].iter_mut().zip(
+            samples[source_start..]
+                .iter()
+                .zip(self.window[target_start..].iter()),
+        ) {
+            target.re = sample * window;
+        }
+        self.fft
+            .process_with_scratch(&mut self.spectrum, &mut self.scratch);
+        for (frequency_db, value) in self
+            .frequency_db
+            .iter_mut()
+            .zip(self.spectrum[..self.fft_size / 2].iter())
+        {
+            let magnitude = value.norm() / self.fft_size as f32;
+            *frequency_db = 20.0 * magnitude.log10();
+        }
+        aggregate_spectrum_data(&self.frequency_db, self.fft_size)
+    }
+}
+
+fn db_power(db: f32) -> f32 {
+    if !db.is_finite() || db <= -100.0 {
+        0.0
+    } else {
+        10.0_f32.powf(db / 10.0)
+    }
+}
+
+fn aggregate_spectrum_data(frequency_db: &[f32], fft_size: usize) -> Vec<f32> {
+    let hz_per_bin = SAMPLE_RATE / fft_size as f32;
     let ratio = SPECTRUM_MAX_HZ / SPECTRUM_MIN_HZ;
     let mut output = vec![-100.0; SPECTRUM_BAND_COUNT];
     for (band_index, value) in output.iter_mut().enumerate() {
@@ -193,23 +270,24 @@ fn analyze_samples(samples: &[f32]) -> Vec<f32> {
         let start = ((low / hz_per_bin - 0.5).floor() as usize).max(1);
         let end = ((high / hz_per_bin + 0.5).ceil() as usize)
             .max(start + 1)
-            .min(spectrum.len() / 2);
+            .min(frequency_db.len());
         if end <= start {
             continue;
         }
-        let power = spectrum[start..end]
+        let power = frequency_db[start..end]
             .iter()
             .enumerate()
-            .map(|(offset, value)| {
+            .map(|(offset, db)| {
                 let index = start + offset;
                 let bin_low = (index as f32 - 0.5) * hz_per_bin;
                 let bin_high = (index as f32 + 0.5) * hz_per_bin;
                 let overlap = (high.min(bin_high) - low.max(bin_low)).max(0.0);
-                let amplitude = (2.0 * value.norm() / FFT_SIZE as f32).max(1e-10);
-                amplitude * amplitude * overlap / hz_per_bin
+                db_power(*db) * overlap / hz_per_bin
             })
             .sum::<f32>();
-        *value = (10.0 * power.max(1e-10).log10()).max(-100.0);
+        if power > 0.0 {
+            *value = (10.0 * power.log10()).max(-100.0);
+        }
     }
     output
 }
@@ -352,6 +430,11 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    fn analyze_samples(samples: &[f32], fft_size: usize) -> Vec<f32> {
+        let mut planner = FftPlanner::<f32>::new();
+        SpectrumTransform::new(fft_size, &mut planner).analyze_recent(samples)
+    }
+
     #[test]
     fn classifies_shareable_content_permission_failures() {
         let errors = [
@@ -384,7 +467,7 @@ mod tests {
 
     #[test]
     fn silence_is_empty() {
-        assert!(analyze_samples(&[0.0; FFT_SIZE])
+        assert!(analyze_samples(&[0.0; DETAIL_FFT_SIZE], DETAIL_FFT_SIZE)
             .iter()
             .all(|value| *value <= -99.0));
     }
@@ -392,12 +475,12 @@ mod tests {
     #[test]
     fn sine_tone_peaks_in_expected_band() {
         let frequency = 700.0;
-        let samples: Vec<f32> = (0..FFT_SIZE)
+        let samples: Vec<f32> = (0..DETAIL_FFT_SIZE)
             .map(|index| {
                 (2.0 * std::f32::consts::PI * frequency * index as f32 / SAMPLE_RATE).sin()
             })
             .collect();
-        let spectrum = analyze_samples(&samples);
+        let spectrum = analyze_samples(&samples, DETAIL_FFT_SIZE);
         let peak = spectrum
             .iter()
             .enumerate()
@@ -420,12 +503,12 @@ mod tests {
         let levels: Vec<f32> = frequencies
             .iter()
             .map(|frequency| {
-                let samples: Vec<f32> = (0..FFT_SIZE)
+                let samples: Vec<f32> = (0..DETAIL_FFT_SIZE)
                     .map(|index| {
                         (2.0 * std::f32::consts::PI * frequency * index as f32 / SAMPLE_RATE).sin()
                     })
                     .collect();
-                let spectrum = analyze_samples(&samples);
+                let spectrum = analyze_samples(&samples, DETAIL_FFT_SIZE);
                 let power = spectrum
                     .into_iter()
                     .filter(|value| *value > -100.0)
@@ -441,5 +524,75 @@ mod tests {
             "tone levels varied by {}dB: {levels:?}",
             highest - lowest
         );
+    }
+
+    #[test]
+    fn matches_web_audio_blackman_window_and_fft_normalization() {
+        let bin = 60;
+        let frequency = bin as f32 * SAMPLE_RATE / DETAIL_FFT_SIZE as f32;
+        let samples: Vec<f32> = (0..DETAIL_FFT_SIZE)
+            .map(|index| {
+                (2.0 * std::f32::consts::PI * frequency * index as f32 / SAMPLE_RATE).sin()
+            })
+            .collect();
+        let mut planner = FftPlanner::<f32>::new();
+        let mut transform = SpectrumTransform::new(DETAIL_FFT_SIZE, &mut planner);
+
+        transform.analyze_recent(&samples);
+
+        let expected_db = 20.0 * 0.21_f32.log10();
+        assert!(
+            (transform.frequency_db[bin] - expected_db).abs() < 0.01,
+            "bin level was {}dB, expected {expected_db}dB",
+            transform.frequency_db[bin]
+        );
+    }
+
+    #[test]
+    fn analyzes_detail_and_transient_windows_into_the_shared_band_count() {
+        assert_eq!(ANALYSIS_UPDATE_INTERVAL_MS, 25);
+        assert_eq!(ANALYSIS_UPDATE_SAMPLE_COUNT, 1_200);
+        let samples: Vec<f32> = (0..DETAIL_FFT_SIZE)
+            .map(|index| (2.0 * std::f32::consts::PI * 700.0 * index as f32 / SAMPLE_RATE).sin())
+            .collect();
+
+        assert_eq!(
+            analyze_samples(&samples, DETAIL_FFT_SIZE).len(),
+            SPECTRUM_BAND_COUNT
+        );
+        assert_eq!(
+            analyze_samples(&samples, TRANSIENT_FFT_SIZE).len(),
+            SPECTRUM_BAND_COUNT
+        );
+    }
+
+    #[test]
+    fn emits_immediately_then_carries_callback_sample_remainders() {
+        let mut samples_since_emit = ANALYSIS_UPDATE_SAMPLE_COUNT;
+
+        assert!(analysis_update_due(&mut samples_since_emit, 1_024));
+        assert_eq!(samples_since_emit, 1_024);
+        assert!(analysis_update_due(&mut samples_since_emit, 1_024));
+        assert_eq!(samples_since_emit, 848);
+        assert!(analysis_update_due(&mut samples_since_emit, 480));
+        assert_eq!(samples_since_emit, 128);
+        assert!(!analysis_update_due(&mut samples_since_emit, 480));
+        assert_eq!(samples_since_emit, 608);
+    }
+
+    #[test]
+    fn pads_missing_history_with_silence_for_the_first_analysis_updates() {
+        let short_samples: Vec<f32> = (0..1_200)
+            .map(|index| (2.0 * std::f32::consts::PI * 700.0 * index as f32 / SAMPLE_RATE).sin())
+            .collect();
+        let mut padded_samples = vec![0.0; DETAIL_FFT_SIZE - short_samples.len()];
+        padded_samples.extend_from_slice(&short_samples);
+
+        let short_spectrum = analyze_samples(&short_samples, DETAIL_FFT_SIZE);
+        let padded_spectrum = analyze_samples(&padded_samples, DETAIL_FFT_SIZE);
+
+        for (short, padded) in short_spectrum.iter().zip(padded_spectrum) {
+            assert!((short - padded).abs() < 0.0001);
+        }
     }
 }
