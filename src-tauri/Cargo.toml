@@ -23,3 +23,4 @@ rustfft = "6"
 serde = { version = "1", features = ["derive"] }
 screencapturekit = { version = "8.0.1", features = ["macos_13_0"] }
 tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"

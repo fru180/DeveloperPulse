@@ -1,4 +1,8 @@
-import { CaptureError, type AnalysisFrame, type AnalysisSource } from "./types";
+import type { AnalysisFrame, AnalysisSource } from "./types";
+import {
+  captureErrorFromTauri,
+  tauriCaptureDebugMessage,
+} from "./capture-errors";
 
 export class MacSystemAudioSource implements AnalysisSource {
   async start(onFrame: Parameters<AnalysisSource["start"]>[0]) {
@@ -11,14 +15,14 @@ export class MacSystemAudioSource implements AnalysisSource {
       channel.onmessage = onFrame;
       await invoke("start_system_audio", { onMessage: channel });
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : "Could not capture Mac system audio.";
-      const code = message.toLowerCase().includes("permission")
-        ? "permission_denied"
-        : "capture_failed";
-      throw new CaptureError(code, message);
+      const debugMessage = tauriCaptureDebugMessage(error);
+      if (debugMessage) {
+        console.error(
+          "Could not start Mac system audio capture:",
+          debugMessage,
+        );
+      }
+      throw captureErrorFromTauri(error);
     }
   }
 

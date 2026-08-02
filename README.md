@@ -45,8 +45,9 @@ npm run tauri dev
 
 1. DeveloperPulseを起動し、**Visualize audio**を選択します。
 2. 初回のみ、macOSの**画面収録とシステムオーディオ録音**へのアクセスを許可します。
-3. 許可後に必要であればDeveloperPulseを再起動し、もう一度**Visualize audio**を選択します。
-4. 終了するときは**Stop**を選択します。
+3. アクセスを拒否した場合は、アプリ内の**Open System Settings**から設定を開き、DeveloperPulseを有効にします。
+4. アプリに戻って**Restart & try again**を選択すると、再起動後に自動で接続を再試行します。
+5. 終了するときは**Stop**を選択します。
 
 ### 表示の調整
 
@@ -96,8 +97,9 @@ npm run tauri dev
 
 1. Open DeveloperPulse and select **Visualize audio**.
 2. On first use, allow access to **Screen & System Audio Recording** in macOS.
-3. Restart DeveloperPulse if prompted, then select **Visualize audio** again.
-4. Select **Stop** when you are finished.
+3. If access was denied, select **Open System Settings** in the app and enable DeveloperPulse.
+4. Return to the app and select **Restart & try again** to restart and reconnect automatically.
+5. Select **Stop** when you are finished.
 
 ### Display controls
 
