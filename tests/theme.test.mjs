@@ -112,10 +112,19 @@ test("places horizontal axis values above the grid and meaning below it", () => 
   );
 });
 
-test("keeps the display mode control at the bottom-right", () => {
+test("uses an accessible two-option display mode control at the bottom-right", () => {
+  assert.match(
+    developerPulseSource,
+    /<fieldset className="mode-control">[\s\S]*<legend className="visually-hidden">Display mode<\/legend>[\s\S]*type="radio"[\s\S]*value="live-cells"[\s\S]*type="radio"[\s\S]*value="timeline"[\s\S]*<\/fieldset>/,
+  );
+  assert.doesNotMatch(developerPulseSource, /className="select-control"/);
   assert.match(
     globalsCssSource,
-    /\.mode-control\s*\{[^}]*margin-left:\s*auto;[^}]*display:\s*flex;/s,
+    /\.mode-control\s*\{[^}]*margin:\s*0 0 0 auto;[^}]*display:\s*inline-flex;/s,
+  );
+  assert.match(
+    globalsCssSource,
+    /\.mode-option input:checked \+ span\s*\{[^}]*background:\s*var\(--accent\);/s,
   );
   assert.match(
     globalsCssSource,

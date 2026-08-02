@@ -85,6 +85,22 @@ function LevelLegend() {
   );
 }
 
+function VisualizeIcon() {
+  return (
+    <svg className="primary-button-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 2.75v10.5L13 8 4 2.75Z" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg className="primary-button-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="3.25" y="3.25" width="9.5" height="9.5" rx="1" />
+    </svg>
+  );
+}
+
 function prepareCanvas(canvas: HTMLCanvasElement) {
   const rect = canvas.getBoundingClientRect();
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -699,11 +715,15 @@ export function DeveloperPulse() {
                 state === "running" ? () => void stop() : () => void start()
               }
             >
-              {state === "requesting"
-                ? "Connecting…"
-                : state === "running"
-                  ? "Stop"
-                  : "Visualize audio"}
+              {state !== "requesting" &&
+                (state === "running" ? <StopIcon /> : <VisualizeIcon />)}
+              <span>
+                {state === "requesting"
+                  ? "Connecting…"
+                  : state === "running"
+                    ? "Stop"
+                    : "Visualize audio"}
+              </span>
             </button>
             <span className="control-divider" />
             <label className="range-control">
@@ -721,19 +741,31 @@ export function DeveloperPulse() {
                 {sensitivity}dB
               </span>
             </label>
-            <label className="mode-control">
-              <span className="control-label">Display mode</span>
-              <select
-                className="select-control"
-                value={mode}
-                onChange={(event) =>
-                  setMode(event.target.value as VisualizerMode)
-                }
-              >
-                <option value="live-cells">Live Cells</option>
-                <option value="timeline">Timeline</option>
-              </select>
-            </label>
+            <fieldset className="mode-control">
+              <legend className="visually-hidden">Display mode</legend>
+              <label className="mode-option">
+                <input
+                  className="visually-hidden"
+                  type="radio"
+                  name="display-mode"
+                  value="live-cells"
+                  checked={mode === "live-cells"}
+                  onChange={() => setMode("live-cells")}
+                />
+                <span>Live Cells</span>
+              </label>
+              <label className="mode-option">
+                <input
+                  className="visually-hidden"
+                  type="radio"
+                  name="display-mode"
+                  value="timeline"
+                  checked={mode === "timeline"}
+                  onChange={() => setMode("timeline")}
+                />
+                <span>Timeline</span>
+              </label>
+            </fieldset>
           </div>
         </section>
         <p className="panel-footnote">
