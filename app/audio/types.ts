@@ -50,23 +50,17 @@ export interface AnalysisSource {
 
 export type CaptureState = "idle" | "requesting" | "running" | "error";
 
-export class CaptureError extends Error {
-  public readonly code:
-    | "unsupported"
-    | "permission_denied"
-    | "no_audio_track"
-    | "capture_ended"
-    | "capture_failed";
+export type CaptureErrorCode =
+  | "unsupported"
+  | "permission_denied"
+  | "no_audio_track"
+  | "capture_ended"
+  | "capture_failed";
 
-  constructor(
-    code:
-      | "unsupported"
-      | "permission_denied"
-      | "no_audio_track"
-      | "capture_ended"
-      | "capture_failed",
-    message: string,
-  ) {
+export class CaptureError extends Error {
+  public readonly code: CaptureErrorCode;
+
+  constructor(code: CaptureErrorCode, message: string) {
     super(message);
     this.code = code;
     this.name = "CaptureError";

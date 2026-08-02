@@ -448,6 +448,95 @@ input:focus-visible {
   line-height: 1.5;
 }
 
+.permission-card {
+  margin: 0 18px 18px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.permission-card-copy {
+  min-width: 0;
+}
+
+.permission-card h2 {
+  margin: 0 0 6px;
+  color: var(--foreground);
+  font-size: var(--font-size-prominent);
+  line-height: 1.4;
+}
+
+.permission-card p {
+  max-width: 760px;
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+
+.permission-settings-path {
+  display: inline-block;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.permission-card .permission-next-step {
+  margin: 10px 0 0;
+  color: var(--foreground);
+}
+
+.permission-card .permission-action-error {
+  margin: 10px 0 0;
+  color: var(--danger);
+}
+
+.permission-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.permission-primary-button {
+  white-space: nowrap;
+}
+
+.secondary-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--foreground);
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--panel-hover);
+}
+
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .controls {
   padding: 15px 18px;
   border-top: 1px solid var(--border);
@@ -495,8 +584,13 @@ input:focus-visible {
 }
 
 .primary-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.55;
+}
+
+.primary-button.requesting:disabled,
+.permission-primary-button:disabled {
+  cursor: wait;
 }
 
 .control-divider {
@@ -596,6 +690,18 @@ input:focus-visible {
   }
   .controls {
     align-items: stretch;
+  }
+  .permission-card {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .permission-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .permission-actions button {
+    width: 100%;
   }
   .control-divider {
     display: none;
