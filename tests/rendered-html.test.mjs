@@ -24,7 +24,7 @@ test("server-renders the DeveloperPulse experience", async () => {
     /<title>DeveloperPulse — System audio, visualized<\/title>/i,
   );
   assert.match(html, /Visualize audio/);
-  assert.match(html, /Your audio will appear here/);
+  assert.doesNotMatch(html, /Your audio will appear here/);
   assert.doesNotMatch(html, /Local processing only/);
   assert.match(html, /<html[^>]+data-theme="light"/i);
   assert.match(html, /src="\/theme-init\.js"/i);
