@@ -87,6 +87,11 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+html:has(.desktop-app-shell),
+body:has(.desktop-app-shell) {
+  overflow: hidden;
+}
+
 button,
 select,
 input {

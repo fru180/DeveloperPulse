@@ -34,6 +34,7 @@ import {
   LIVE_CELL_COLUMNS,
   LIVE_CELL_ROWS,
 } from "./live-cell-layout";
+import { DesktopWindowFitCoordinator } from "./desktop-window-fit";
 import {
   CaptureError,
   TIMELINE_INTERVAL_MS,
@@ -299,42 +300,51 @@ export function DeveloperPulse() {
     let firstFrame = 0;
     let secondFrame = 0;
     let resizeTimer = 0;
-    let requestedHeight = 0;
     let resizeOperation = Promise.resolve();
+    const fitCoordinator = new DesktopWindowFitCoordinator();
 
     const scheduleWindowFit = () => {
+      const generation = fitCoordinator.beginLayoutChange();
       window.clearTimeout(resizeTimer);
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
       resizeTimer = window.setTimeout(() => {
         firstFrame = requestAnimationFrame(() => {
           secondFrame = requestAnimationFrame(() => {
-            const targetContentHeight =
+            const contentHeight =
               Math.ceil(
                 Math.max(
                   appShell.scrollHeight,
                   appShell.getBoundingClientRect().height,
                 ),
               ) + 1;
-            if (targetContentHeight === requestedHeight) return;
-            requestedHeight = targetContentHeight;
+            const fitRequest = fitCoordinator.capture(
+              generation,
+              window.innerWidth,
+              contentHeight,
+            );
+            if (!fitRequest) return;
+
+            const requestIsCurrent = () =>
+              !disposed &&
+              fitCoordinator.isCurrent(fitRequest, window.innerWidth);
 
             resizeOperation = resizeOperation
               .then(async () => {
-                if (disposed || targetContentHeight !== requestedHeight) return;
+                if (!requestIsCurrent()) return;
                 const [{ LogicalSize }, { getCurrentWindow }] =
                   await Promise.all([
                     import("@tauri-apps/api/dpi"),
                     import("@tauri-apps/api/window"),
                   ]);
-                if (disposed || targetContentHeight !== requestedHeight) return;
+                if (!requestIsCurrent()) return;
 
                 const appWindow = getCurrentWindow();
                 const [physicalSize, scaleFactor] = await Promise.all([
                   appWindow.innerSize(),
                   appWindow.scaleFactor(),
                 ]);
-                if (disposed || targetContentHeight !== requestedHeight) return;
+                if (!requestIsCurrent()) return;
 
                 const currentSize = physicalSize.toLogical(scaleFactor);
                 const windowChromeHeight = Math.max(
@@ -342,7 +352,7 @@ export function DeveloperPulse() {
                   currentSize.height - window.innerHeight,
                 );
                 const targetWindowHeight =
-                  targetContentHeight + windowChromeHeight;
+                  fitRequest.contentHeight + windowChromeHeight;
                 const targetSize = new LogicalSize(
                   currentSize.width,
                   targetWindowHeight,
@@ -356,20 +366,17 @@ export function DeveloperPulse() {
 
                 if (heightDifference > DESKTOP_RESIZE_TOLERANCE) {
                   await appWindow.setSize(targetSize);
-                  if (disposed || targetContentHeight !== requestedHeight)
-                    return;
+                  if (!requestIsCurrent()) return;
                   await appWindow.setMinSize(targetMinSize);
                 } else if (heightDifference < -DESKTOP_RESIZE_TOLERANCE) {
                   await appWindow.setMinSize(targetMinSize);
-                  if (disposed || targetContentHeight !== requestedHeight)
-                    return;
+                  if (!requestIsCurrent()) return;
                   await appWindow.setSize(targetSize);
                 } else {
                   await appWindow.setMinSize(targetMinSize);
                 }
               })
               .catch((windowResizeError) => {
-                requestedHeight = 0;
                 if (!disposed)
                   console.error(
                     "Could not fit the desktop window to its content:",
