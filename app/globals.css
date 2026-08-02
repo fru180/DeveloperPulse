@@ -418,25 +418,6 @@ input:focus-visible {
   background: var(--contribution-4);
 }
 
-.idle-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.idle-message {
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--overlay);
-  color: var(--muted);
-  font-family: var(--font-geist-mono), monospace;
-  font-size: var(--font-size-body);
-  backdrop-filter: blur(8px);
-}
-
 .error-banner {
   margin: 0 18px 18px;
   padding: 11px 13px;

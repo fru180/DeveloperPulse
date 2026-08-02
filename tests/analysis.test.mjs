@@ -24,6 +24,7 @@ import {
   updateLiveEnergies,
 } from "../app/audio/analysis.ts";
 import {
+  BAND_RANGES,
   BROWSER_DETAIL_FFT_SIZE,
   BROWSER_TRANSIENT_FFT_SIZE,
   BROWSER_UPDATE_INTERVAL_MS,
@@ -117,6 +118,10 @@ test("aggregates FFT data into 64 logarithmic spectrum bands", () => {
     `peak ${peak}, expected ${expected}`,
   );
   assert.equal(aggregateTimelineBands(spectrum).length, 7);
+});
+
+test("starts the lowest timeline band at the 40Hz analysis floor", () => {
+  assert.deepEqual(BAND_RANGES[0], [40, 60]);
 });
 
 test("keeps equal FFT components equally strong across the spectrum", () => {

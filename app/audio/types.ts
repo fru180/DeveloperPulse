@@ -1,5 +1,5 @@
 export const BAND_RANGES = [
-  [20, 60],
+  [40, 60],
   [60, 150],
   [150, 400],
   [400, 1_000],
@@ -8,7 +8,6 @@ export const BAND_RANGES = [
   [6_000, 16_000],
 ] as const;
 
-export const BAND_LABELS = ["16k", "6k", "2.5k", "1k", "400", "150", "20"];
 export const COLUMN_COUNT = 53;
 export const ROW_COUNT = 7;
 export const SPECTRUM_BAND_COUNT = 64;
