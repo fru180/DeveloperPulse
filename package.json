@@ -13,7 +13,7 @@
     "build:desktop": "vite build --config vite.desktop.config.ts",
     "tauri": "tauri",
     "test": "npm run build && npm run test:unit && node --test tests/rendered-html.test.mjs",
-    "test:unit": "node --experimental-strip-types --test tests/analysis.test.mjs tests/capture-errors.test.mjs tests/theme.test.mjs",
+    "test:unit": "node --experimental-strip-types --test tests/analysis.test.mjs tests/capture-errors.test.mjs tests/desktop-layout.test.mjs tests/theme.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern desktop-dist --ignore-pattern .next --ignore-pattern build --ignore-pattern src-tauri/target",
     "typecheck": "tsc --noEmit --incremental false",
     "format": "npm run format:web && npm run format:rust",

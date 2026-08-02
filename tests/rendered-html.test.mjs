@@ -29,6 +29,19 @@ test("server-renders the DeveloperPulse experience", async () => {
   assert.match(html, /<html[^>]+data-theme="light"/i);
   assert.match(html, /src="\/theme-init\.js"/i);
   assert.match(html, /Switch to dark mode/);
+  assert.match(
+    html,
+    /<header class="topbar">[\s\S]*aria-label="DeveloperPulse"[\s\S]*DeveloperPulse[\s\S]*<\/header>/,
+  );
+  assert.doesNotMatch(
+    html,
+    /<header class="topbar">[\s\S]*class="theme-toggle"[\s\S]*<\/header>/,
+  );
+  assert.doesNotMatch(html, /class="(?:panel-head|capture-state|state-title)"/);
+  assert.match(
+    html,
+    /class="controls"[\s\S]*Visualize audio[\s\S]*class="control-elapsed"[^>]*>00:00<\/span>[\s\S]*class="display-controls"[\s\S]*class="theme-toggle"[\s\S]*Live Cells[\s\S]*Timeline/,
+  );
   assert.match(html, /taller columns indicate more sudden rises in audio/);
   assert.match(html, /Frequency/);
   assert.match(html, /Sudden/);

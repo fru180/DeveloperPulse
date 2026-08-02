@@ -13,10 +13,9 @@
     "windows": [
       {
         "title": "DeveloperPulse",
-        "width": 1180,
-        "height": 540,
+        "width": 864,
+        "height": 330,
         "minWidth": 720,
-        "minHeight": 540,
         "resizable": true
       }
     ],
