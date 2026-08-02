@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { DesktopWindowFitCoordinator } from "../app/desktop-window-fit.ts";
 
 const tauriConfig = JSON.parse(
   await readFile(
@@ -52,6 +53,28 @@ test("uses equal compact outer padding in the desktop layout", () => {
   );
 });
 
+test("prevents desktop overflow from changing the responsive viewport width", () => {
+  assert.match(
+    globalsCssSource,
+    /html:has\(\.desktop-app-shell\),\s*body:has\(\.desktop-app-shell\)\s*\{[^}]*overflow:\s*hidden;/s,
+  );
+});
+
+test("invalidates stale desktop fits when only the viewport width changes", () => {
+  const coordinator = new DesktopWindowFitCoordinator();
+  const firstGeneration = coordinator.beginLayoutChange();
+  const firstRequest = coordinator.capture(firstGeneration, 721, 330);
+  assert.ok(firstRequest);
+
+  const secondGeneration = coordinator.beginLayoutChange();
+  const secondRequest = coordinator.capture(secondGeneration, 720, 330);
+  assert.ok(secondRequest);
+
+  assert.equal(coordinator.isCurrent(firstRequest, 721), false);
+  assert.equal(coordinator.isCurrent(secondRequest, 720), true);
+  assert.equal(coordinator.isCurrent(secondRequest, 721), false);
+});
+
 test("fits the desktop window and minimum height to its content", () => {
   assert.match(
     globalsCssSource,
@@ -68,7 +91,7 @@ test("fits the desktop window and minimum height to its content", () => {
   );
   assert.match(
     developerPulseSource,
-    /targetContentHeight\s*\+\s*windowChromeHeight/,
+    /fitRequest\.contentHeight\s*\+\s*windowChromeHeight/,
   );
   assert.match(developerPulseSource, /appWindow\.setMinSize/);
   assert.match(developerPulseSource, /appWindow\.setSize/);
