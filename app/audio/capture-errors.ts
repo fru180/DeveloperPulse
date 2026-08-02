@@ -6,15 +6,13 @@ export const CAPTURE_RETRY_STORAGE_KEY =
   "developer-pulse-retry-system-audio-after-restart";
 
 export const SYSTEM_AUDIO_PERMISSION_GUIDANCE = {
-  title: "Allow access to system audio",
-  body: "macOS requires Screen & System Audio Recording permission before DeveloperPulse can visualize audio playing on your Mac. Your audio is analyzed on this Mac—it isn’t recorded or uploaded.",
+  title: "Allow system audio",
+  body: "Enable DeveloperPulse in:",
   settingsPath:
     "System Settings → Privacy & Security → Screen & System Audio Recording",
-  nextStep:
-    "Turn on DeveloperPulse, return here, then restart the app to apply the change.",
-  openFailed: "System Settings couldn’t be opened. Follow the path above.",
-  restartFailed:
-    "DeveloperPulse couldn’t restart. Quit and reopen the app, then select Visualize audio.",
+  nextStep: "Then restart DeveloperPulse.",
+  openFailed: "Open System Settings and use the path above.",
+  restartFailed: "Quit and reopen DeveloperPulse, then try again.",
 } as const;
 
 export const GENERIC_CAPTURE_ERROR_MESSAGE =

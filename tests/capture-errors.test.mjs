@@ -68,6 +68,15 @@ test("provides the direct macOS settings destination and manual path", () => {
     SYSTEM_AUDIO_PERMISSION_GUIDANCE.settingsPath,
     /System Settings → Privacy & Security → Screen & System Audio Recording/,
   );
+  assert.equal(SYSTEM_AUDIO_PERMISSION_GUIDANCE.title, "Allow system audio");
+  assert.equal(
+    SYSTEM_AUDIO_PERMISSION_GUIDANCE.body,
+    "Enable DeveloperPulse in:",
+  );
+  assert.equal(
+    SYSTEM_AUDIO_PERMISSION_GUIDANCE.nextStep,
+    "Then restart DeveloperPulse.",
+  );
 });
 
 test("consumes the restart retry marker exactly once", () => {

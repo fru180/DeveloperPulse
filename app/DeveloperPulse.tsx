@@ -70,6 +70,9 @@ const TIMELINE_FREQUENCY_TICKS = [
   { label: "40", row: 7 },
 ] as const;
 const ATTACK_LABELS = ["Sudden", "", "", "Rising", "", "", "Steady"] as const;
+const DESKTOP_MIN_WIDTH = 720;
+const DESKTOP_RESIZE_TOLERANCE = 1;
+const DESKTOP_RESIZE_DEBOUNCE_MS = 100;
 
 function LevelLegend() {
   return (
@@ -98,6 +101,34 @@ function StopIcon() {
     <svg className="primary-button-icon" viewBox="0 0 16 16" aria-hidden="true">
       <rect x="3.25" y="3.25" width="9.5" height="9.5" rx="1" />
     </svg>
+  );
+}
+
+function ThemeToggle({ onToggle }: { onToggle: () => void }) {
+  return (
+    <button className="theme-toggle" type="button" onClick={onToggle}>
+      <svg
+        className="theme-icon theme-icon-moon"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+      >
+        <path d="M14 10.45A6.5 6.5 0 0 1 5.55 2 6.5 6.5 0 1 0 14 10.45Z" />
+      </svg>
+      <svg
+        className="theme-icon theme-icon-sun"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+      >
+        <circle cx="8" cy="8" r="3" />
+        <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06" />
+      </svg>
+      <span className="visually-hidden theme-label-dark">
+        Switch to dark mode
+      </span>
+      <span className="visually-hidden theme-label-light">
+        Switch to light mode
+      </span>
+    </button>
   );
 }
 
@@ -197,6 +228,7 @@ function renderLiveCells(
 }
 
 export function DeveloperPulse() {
+  const appShellRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timelineSmoothRef = useRef<BandDb | null>(null);
   const previousTransientBandsRef = useRef<number[] | null>(null);
@@ -257,6 +289,110 @@ export function DeveloperPulse() {
   useEffect(() => {
     gridRef.current = grid;
   }, [grid]);
+
+  useEffect(() => {
+    if (!desktop) return;
+    const appShell = appShellRef.current;
+    if (!appShell) return;
+
+    let disposed = false;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    let resizeTimer = 0;
+    let requestedHeight = 0;
+    let resizeOperation = Promise.resolve();
+
+    const scheduleWindowFit = () => {
+      window.clearTimeout(resizeTimer);
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+      resizeTimer = window.setTimeout(() => {
+        firstFrame = requestAnimationFrame(() => {
+          secondFrame = requestAnimationFrame(() => {
+            const targetContentHeight =
+              Math.ceil(
+                Math.max(
+                  appShell.scrollHeight,
+                  appShell.getBoundingClientRect().height,
+                ),
+              ) + 1;
+            if (targetContentHeight === requestedHeight) return;
+            requestedHeight = targetContentHeight;
+
+            resizeOperation = resizeOperation
+              .then(async () => {
+                if (disposed || targetContentHeight !== requestedHeight) return;
+                const [{ LogicalSize }, { getCurrentWindow }] =
+                  await Promise.all([
+                    import("@tauri-apps/api/dpi"),
+                    import("@tauri-apps/api/window"),
+                  ]);
+                if (disposed || targetContentHeight !== requestedHeight) return;
+
+                const appWindow = getCurrentWindow();
+                const [physicalSize, scaleFactor] = await Promise.all([
+                  appWindow.innerSize(),
+                  appWindow.scaleFactor(),
+                ]);
+                if (disposed || targetContentHeight !== requestedHeight) return;
+
+                const currentSize = physicalSize.toLogical(scaleFactor);
+                const windowChromeHeight = Math.max(
+                  0,
+                  currentSize.height - window.innerHeight,
+                );
+                const targetWindowHeight =
+                  targetContentHeight + windowChromeHeight;
+                const targetSize = new LogicalSize(
+                  currentSize.width,
+                  targetWindowHeight,
+                );
+                const targetMinSize = new LogicalSize(
+                  DESKTOP_MIN_WIDTH,
+                  targetWindowHeight,
+                );
+                const heightDifference =
+                  targetWindowHeight - currentSize.height;
+
+                if (heightDifference > DESKTOP_RESIZE_TOLERANCE) {
+                  await appWindow.setSize(targetSize);
+                  if (disposed || targetContentHeight !== requestedHeight)
+                    return;
+                  await appWindow.setMinSize(targetMinSize);
+                } else if (heightDifference < -DESKTOP_RESIZE_TOLERANCE) {
+                  await appWindow.setMinSize(targetMinSize);
+                  if (disposed || targetContentHeight !== requestedHeight)
+                    return;
+                  await appWindow.setSize(targetSize);
+                } else {
+                  await appWindow.setMinSize(targetMinSize);
+                }
+              })
+              .catch((windowResizeError) => {
+                requestedHeight = 0;
+                if (!disposed)
+                  console.error(
+                    "Could not fit the desktop window to its content:",
+                    windowResizeError,
+                  );
+              });
+          });
+        });
+      }, DESKTOP_RESIZE_DEBOUNCE_MS);
+    };
+
+    const observer = new ResizeObserver(scheduleWindowFit);
+    observer.observe(appShell);
+    scheduleWindowFit();
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(resizeTimer);
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+      observer.disconnect();
+    };
+  }, [desktop]);
 
   const drawCurrent = useCallback(() => {
     const canvas = canvasRef.current;
@@ -494,15 +630,6 @@ export function DeveloperPulse() {
 
   const permissionDenied = desktop && error?.code === "permission_denied";
 
-  const status =
-    state === "requesting"
-      ? "Waiting for permission"
-      : state === "running"
-        ? "Live"
-        : state === "error"
-          ? "Capture unavailable"
-          : "Ready";
-
   const toggleTheme = () => {
     const nextTheme: Theme = theme === "light" ? "dark" : "light";
     document.documentElement.dataset.theme = nextTheme;
@@ -519,59 +646,101 @@ export function DeveloperPulse() {
     setTheme(nextTheme);
   };
 
+  const captureErrorContent = permissionDenied ? (
+    <section
+      className="permission-card"
+      role="alert"
+      aria-labelledby="permission-card-title"
+    >
+      <div className="permission-card-copy">
+        <h2 id="permission-card-title">
+          {SYSTEM_AUDIO_PERMISSION_GUIDANCE.title}
+        </h2>
+        <p>{SYSTEM_AUDIO_PERMISSION_GUIDANCE.body}</p>
+        <code className="permission-settings-path">
+          {SYSTEM_AUDIO_PERMISSION_GUIDANCE.settingsPath}
+        </code>
+        {permissionStep === "needs-restart" && (
+          <p className="permission-next-step">
+            {SYSTEM_AUDIO_PERMISSION_GUIDANCE.nextStep}
+          </p>
+        )}
+        {permissionActionError && (
+          <p className="permission-action-error">{permissionActionError}</p>
+        )}
+      </div>
+      <div className="permission-actions">
+        {permissionStep === "needs-restart" ? (
+          <>
+            <button
+              className="primary-button permission-primary-button"
+              type="button"
+              disabled={permissionActionPending !== null}
+              onClick={() => void restartAndRetry()}
+            >
+              {permissionActionPending === "restarting"
+                ? "Restarting…"
+                : "Restart"}
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={permissionActionPending !== null}
+              onClick={() => void openSystemSettings()}
+            >
+              {permissionActionPending === "opening-settings"
+                ? "Opening…"
+                : "Open System Settings"}
+            </button>
+          </>
+        ) : (
+          <button
+            className="primary-button permission-primary-button"
+            type="button"
+            disabled={permissionActionPending !== null}
+            onClick={() => void openSystemSettings()}
+          >
+            {permissionActionPending === "opening-settings"
+              ? "Opening…"
+              : "Open System Settings"}
+          </button>
+        )}
+      </div>
+    </section>
+  ) : error ? (
+    <div className="error-banner" role="alert">
+      {error.message}
+    </div>
+  ) : null;
+
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand" aria-label="DeveloperPulse">
-          <span className="brand-mark" aria-hidden="true">
-            {Array.from({ length: 9 }, (_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-          DeveloperPulse
-        </div>
-        <button className="theme-toggle" type="button" onClick={toggleTheme}>
-          <svg
-            className="theme-icon theme-icon-moon"
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-          >
-            <path d="M14 10.45A6.5 6.5 0 0 1 5.55 2 6.5 6.5 0 1 0 14 10.45Z" />
-          </svg>
-          <svg
-            className="theme-icon theme-icon-sun"
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-          >
-            <circle cx="8" cy="8" r="3" />
-            <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06" />
-          </svg>
-          <span className="visually-hidden theme-label-dark">
-            Switch to dark mode
-          </span>
-          <span className="visually-hidden theme-label-light">
-            Switch to light mode
-          </span>
-        </button>
-      </header>
+    <main
+      ref={appShellRef}
+      className={desktop ? "app-shell desktop-app-shell" : "app-shell"}
+    >
+      {!desktop && (
+        <header className="topbar">
+          <div className="brand" aria-label="DeveloperPulse">
+            <span className="brand-mark" aria-hidden="true">
+              {Array.from({ length: 9 }, (_, index) => (
+                <span key={index} />
+              ))}
+            </span>
+            DeveloperPulse
+          </div>
+        </header>
+      )}
 
       <section className="workspace">
         <section
           className="visualizer-panel"
           aria-label="Audio frequency visualizer"
         >
-          <div className="panel-head">
-            <div className="capture-state" role="status" aria-live="polite">
-              <span
-                className={`state-light ${state === "running" ? "running" : ""}`}
-              />
-              <span className="state-title">{status}</span>
-            </div>
-            <span className="live-clock">{elapsed}</span>
-          </div>
-
           <div className="canvas-wrap">
-            <div className={`canvas-stage ${mode}`}>
+            <div
+              className={`canvas-stage ${mode}`}
+              aria-hidden={desktop && error ? true : undefined}
+            >
               <div
                 className={
                   mode === "live-cells" ? "attack-labels" : "frequency-labels"
@@ -635,76 +804,12 @@ export function DeveloperPulse() {
                 </div>
               </div>
             </div>
+            {desktop && captureErrorContent && (
+              <div className="canvas-error-overlay">{captureErrorContent}</div>
+            )}
           </div>
 
-          {permissionDenied ? (
-            <section
-              className="permission-card"
-              role="alert"
-              aria-labelledby="permission-card-title"
-            >
-              <div className="permission-card-copy">
-                <h2 id="permission-card-title">
-                  {SYSTEM_AUDIO_PERMISSION_GUIDANCE.title}
-                </h2>
-                <p>{SYSTEM_AUDIO_PERMISSION_GUIDANCE.body}</p>
-                <code className="permission-settings-path">
-                  {SYSTEM_AUDIO_PERMISSION_GUIDANCE.settingsPath}
-                </code>
-                {permissionStep === "needs-restart" && (
-                  <p className="permission-next-step">
-                    {SYSTEM_AUDIO_PERMISSION_GUIDANCE.nextStep}
-                  </p>
-                )}
-                {permissionActionError && (
-                  <p className="permission-action-error">
-                    {permissionActionError}
-                  </p>
-                )}
-              </div>
-              <div className="permission-actions">
-                {permissionStep === "needs-restart" ? (
-                  <>
-                    <button
-                      className="primary-button permission-primary-button"
-                      type="button"
-                      disabled={permissionActionPending !== null}
-                      onClick={() => void restartAndRetry()}
-                    >
-                      {permissionActionPending === "restarting"
-                        ? "Restarting…"
-                        : "Restart & try again"}
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={permissionActionPending !== null}
-                      onClick={() => void openSystemSettings()}
-                    >
-                      {permissionActionPending === "opening-settings"
-                        ? "Opening…"
-                        : "Open System Settings"}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="primary-button permission-primary-button"
-                    type="button"
-                    disabled={permissionActionPending !== null}
-                    onClick={() => void openSystemSettings()}
-                  >
-                    {permissionActionPending === "opening-settings"
-                      ? "Opening…"
-                      : "Open System Settings"}
-                  </button>
-                )}
-              </div>
-            </section>
-          ) : error ? (
-            <div className="error-banner" role="alert">
-              {error.message}
-            </div>
-          ) : null}
+          {!desktop && captureErrorContent}
 
           <div className="controls">
             <button
@@ -725,6 +830,12 @@ export function DeveloperPulse() {
                     : "Visualize audio"}
               </span>
             </button>
+            <span
+              className="control-elapsed"
+              aria-label={`Elapsed time ${elapsed}`}
+            >
+              {elapsed}
+            </span>
             <span className="control-divider" />
             <label className="range-control">
               <span className="control-label">Sensitivity</span>
@@ -741,31 +852,34 @@ export function DeveloperPulse() {
                 {sensitivity}dB
               </span>
             </label>
-            <fieldset className="mode-control">
-              <legend className="visually-hidden">Display mode</legend>
-              <label className="mode-option">
-                <input
-                  className="visually-hidden"
-                  type="radio"
-                  name="display-mode"
-                  value="live-cells"
-                  checked={mode === "live-cells"}
-                  onChange={() => setMode("live-cells")}
-                />
-                <span>Live Cells</span>
-              </label>
-              <label className="mode-option">
-                <input
-                  className="visually-hidden"
-                  type="radio"
-                  name="display-mode"
-                  value="timeline"
-                  checked={mode === "timeline"}
-                  onChange={() => setMode("timeline")}
-                />
-                <span>Timeline</span>
-              </label>
-            </fieldset>
+            <div className="display-controls">
+              <ThemeToggle onToggle={toggleTheme} />
+              <fieldset className="mode-control">
+                <legend className="visually-hidden">Display mode</legend>
+                <label className="mode-option">
+                  <input
+                    className="visually-hidden"
+                    type="radio"
+                    name="display-mode"
+                    value="live-cells"
+                    checked={mode === "live-cells"}
+                    onChange={() => setMode("live-cells")}
+                  />
+                  <span>Live Cells</span>
+                </label>
+                <label className="mode-option">
+                  <input
+                    className="visually-hidden"
+                    type="radio"
+                    name="display-mode"
+                    value="timeline"
+                    checked={mode === "timeline"}
+                    onChange={() => setMode("timeline")}
+                  />
+                  <span>Timeline</span>
+                </label>
+              </fieldset>
+            </div>
           </div>
         </section>
         <p className="panel-footnote">

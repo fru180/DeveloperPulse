@@ -112,7 +112,7 @@ test("places horizontal axis values above the grid and meaning below it", () => 
   );
 });
 
-test("uses an accessible two-option display mode control at the bottom-right", () => {
+test("groups the theme and accessible display mode controls at the bottom-right", () => {
   assert.match(
     developerPulseSource,
     /<fieldset className="mode-control">[\s\S]*<legend className="visually-hidden">Display mode<\/legend>[\s\S]*type="radio"[\s\S]*value="live-cells"[\s\S]*type="radio"[\s\S]*value="timeline"[\s\S]*<\/fieldset>/,
@@ -120,7 +120,7 @@ test("uses an accessible two-option display mode control at the bottom-right", (
   assert.doesNotMatch(developerPulseSource, /className="select-control"/);
   assert.match(
     globalsCssSource,
-    /\.mode-control\s*\{[^}]*margin:\s*0 0 0 auto;[^}]*display:\s*inline-flex;/s,
+    /\.display-controls\s*\{[^}]*margin:\s*0 0 0 auto;[^}]*display:\s*inline-flex;/s,
   );
   assert.match(
     globalsCssSource,
@@ -128,6 +128,6 @@ test("uses an accessible two-option display mode control at the bottom-right", (
   );
   assert.match(
     globalsCssSource,
-    /@media\s*\(max-width:\s*720px\)[\s\S]*\.mode-control\s*\{[^}]*order:\s*4;/s,
+    /@media\s*\(max-width:\s*720px\)[\s\S]*\.display-controls\s*\{[^}]*order:\s*4;/s,
   );
 });
