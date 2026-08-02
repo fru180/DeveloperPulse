@@ -27,6 +27,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check public identifiers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          expected_bundle_id="app.developerpulse.desktop"
+          actual_bundle_id="$(node -p "require('./src-tauri/tauri.conf.json').identifier")"
+
+          if [[ "$actual_bundle_id" != "$expected_bundle_id" ]]; then
+            echo "Expected bundle identifier $expected_bundle_id, got $actual_bundle_id"
+            exit 1
+          fi
+
+          invalid_emails="$(
+            git log --format='%ae%n%ce' "$BASE_SHA..$HEAD_SHA" |
+              sort -u |
+              grep -Ev '^(noreply@github\.com|[^[:space:]]+@users\.noreply\.github\.com)$' || true
+          )"
+
+          if [[ -n "$invalid_emails" ]]; then
+            echo "Commit author and committer emails must use a GitHub noreply address:"
+            echo "$invalid_emails"
+            exit 1
+          fi
+
       - name: Classify changed files
         id: filter
         env:

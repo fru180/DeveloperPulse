@@ -42,7 +42,8 @@ Quit DeveloperPulse before starting. For every rebuilt development app, run the 
 
 ```sh
 npm run tauri build -- --debug --bundles app
-tccutil reset ScreenCapture app.developerpulse.desktop
+bundle_id="$(node -p "require('./src-tauri/tauri.conf.json').identifier")"
+tccutil reset ScreenCapture "$bundle_id"
 open -n src-tauri/target/debug/bundle/macos/DeveloperPulse.app
 ```
 
