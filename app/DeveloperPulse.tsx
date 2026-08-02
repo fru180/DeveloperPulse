@@ -35,7 +35,6 @@ import {
   LIVE_CELL_ROWS,
 } from "./live-cell-layout";
 import {
-  BAND_LABELS,
   CaptureError,
   TIMELINE_INTERVAL_MS,
   TIMELINE_WINDOW_SECONDS,
@@ -65,6 +64,11 @@ const LIVE_FREQUENCY_TICKS = [
   { label: "16k", minor: false },
 ] as const;
 const TIMELINE_INTERMEDIATE_TICKS = [20, 15, 10, 5] as const;
+const TIMELINE_FREQUENCY_TICKS = [
+  { label: "16k", row: 1 },
+  { label: "1k", row: 4 },
+  { label: "40", row: 7 },
+] as const;
 const ATTACK_LABELS = ["Sudden", "", "", "Rising", "", "", "Steady"] as const;
 
 function LevelLegend() {
@@ -558,11 +562,15 @@ export function DeveloperPulse() {
                 }
                 aria-hidden="true"
               >
-                {(mode === "live-cells" ? ATTACK_LABELS : BAND_LABELS).map(
-                  (label, index) => (
-                    <span key={`${label}-${index}`}>{label}</span>
-                  ),
-                )}
+                {mode === "live-cells"
+                  ? ATTACK_LABELS.map((label, index) => (
+                      <span key={`${label}-${index}`}>{label}</span>
+                    ))
+                  : TIMELINE_FREQUENCY_TICKS.map(({ label, row }) => (
+                      <span key={label} style={{ gridRow: row }}>
+                        {label}
+                      </span>
+                    ))}
               </div>
               <div className="canvas-column">
                 <div className={`graph-value-axis ${mode}`} aria-hidden="true">
@@ -611,13 +619,6 @@ export function DeveloperPulse() {
                 </div>
               </div>
             </div>
-            {state !== "running" && state !== "requesting" && (
-              <div className="idle-overlay">
-                <span className="idle-message">
-                  Your audio will appear here
-                </span>
-              </div>
-            )}
           </div>
 
           {permissionDenied ? (
