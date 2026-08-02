@@ -1,4 +1,5 @@
 <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" fill="#FFFFFF" />
   <g fill="#1F883D" transform="rotate(-5 16 16)">
     <rect x="3.5" y="3.5" width="7" height="7" rx="2" opacity="0.28" />
     <rect x="12.5" y="3.5" width="7" height="7" rx="2" opacity="0.62" />
