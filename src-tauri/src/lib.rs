@@ -1,5 +1,6 @@
 use rustfft::{num_complex::Complex32, FftPlanner};
 use screencapturekit::cm::AudioBufferList;
+use screencapturekit::error::{SCError, SCStreamErrorCode};
 use screencapturekit::prelude::*;
 use serde::Serialize;
 use std::{
@@ -8,7 +9,7 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use tauri::{ipc::Channel, State};
+use tauri::{ipc::Channel, AppHandle, State};
 
 const FFT_SIZE: usize = 4096;
 const SAMPLE_RATE: f32 = 48_000.0;
@@ -22,6 +23,46 @@ struct AnalysisFrame {
     sequence: u64,
     captured_at_ms: u128,
     spectrum_db: Vec<f32>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum CaptureErrorCode {
+    PermissionDenied,
+    NoDisplay,
+    CaptureFailed,
+    AlreadyRunning,
+    StateUnavailable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CaptureCommandError {
+    code: CaptureErrorCode,
+    debug_message: String,
+}
+
+impl CaptureCommandError {
+    fn new(code: CaptureErrorCode, debug_message: impl Into<String>) -> Self {
+        Self {
+            code,
+            debug_message: debug_message.into(),
+        }
+    }
+}
+
+fn classify_shareable_content_error(error: SCError) -> CaptureCommandError {
+    let code = match &error {
+        SCError::NoShareableContent(_) | SCError::PermissionDenied(_) => {
+            CaptureErrorCode::PermissionDenied
+        }
+        SCError::SCStreamError {
+            code: SCStreamErrorCode::UserDeclined,
+            ..
+        } => CaptureErrorCode::PermissionDenied,
+        _ => CaptureErrorCode::CaptureFailed,
+    };
+    CaptureCommandError::new(code, error.to_string())
 }
 
 struct CaptureSession {
@@ -176,17 +217,16 @@ fn analyze_samples(samples: &[f32]) -> Vec<f32> {
 fn capture_loop(
     on_message: Channel<AnalysisFrame>,
     stop_rx: mpsc::Receiver<()>,
-    ready_tx: mpsc::SyncSender<Result<(), String>>,
+    ready_tx: mpsc::SyncSender<Result<(), CaptureCommandError>>,
 ) {
-    let result = (|| -> Result<(), String> {
-        let content = SCShareableContent::get().map_err(|error| {
-            format!("Screen & System Audio Recording permission is required: {error}")
+    let result = (|| -> Result<(), CaptureCommandError> {
+        let content = SCShareableContent::get().map_err(classify_shareable_content_error)?;
+        let display = content.displays().into_iter().next().ok_or_else(|| {
+            CaptureCommandError::new(
+                CaptureErrorCode::NoDisplay,
+                "No display is available for system audio capture.",
+            )
         })?;
-        let display = content
-            .displays()
-            .into_iter()
-            .next()
-            .ok_or_else(|| "No display is available for system audio capture.".to_string())?;
         let filter = SCContentFilter::create()
             .with_display(&display)
             .with_excluding_windows(&[])
@@ -203,14 +243,20 @@ fn capture_loop(
         };
         let mut stream = SCStream::new(&filter, &config);
         stream.add_output_handler(handler, SCStreamOutputType::Audio);
-        stream
-            .start_capture()
-            .map_err(|error| format!("Could not start system audio capture: {error}"))?;
+        stream.start_capture().map_err(|error| {
+            CaptureCommandError::new(
+                CaptureErrorCode::CaptureFailed,
+                format!("Could not start system audio capture: {error}"),
+            )
+        })?;
         let _ = ready_tx.send(Ok(()));
         let _ = stop_rx.recv();
-        stream
-            .stop_capture()
-            .map_err(|error| format!("Could not stop system audio capture: {error}"))?;
+        stream.stop_capture().map_err(|error| {
+            CaptureCommandError::new(
+                CaptureErrorCode::CaptureFailed,
+                format!("Could not stop system audio capture: {error}"),
+            )
+        })?;
         Ok(())
     })();
 
@@ -223,13 +269,18 @@ fn capture_loop(
 fn start_system_audio(
     on_message: Channel<AnalysisFrame>,
     state: State<'_, CaptureState>,
-) -> Result<(), String> {
-    let mut session = state
-        .0
-        .lock()
-        .map_err(|_| "Capture state is unavailable.".to_string())?;
+) -> Result<(), CaptureCommandError> {
+    let mut session = state.0.lock().map_err(|_| {
+        CaptureCommandError::new(
+            CaptureErrorCode::StateUnavailable,
+            "Capture state is unavailable.",
+        )
+    })?;
     if session.is_some() {
-        return Err("System audio capture is already running.".to_string());
+        return Err(CaptureCommandError::new(
+            CaptureErrorCode::AlreadyRunning,
+            "System audio capture is already running.",
+        ));
     }
 
     let (stop_tx, stop_rx) = mpsc::channel();
@@ -246,35 +297,52 @@ fn start_system_audio(
         }
         Err(_) => {
             let _ = handle.join();
-            Err("System audio capture stopped before it was ready.".to_string())
+            Err(CaptureCommandError::new(
+                CaptureErrorCode::CaptureFailed,
+                "System audio capture stopped before it was ready.",
+            ))
         }
     }
 }
 
 #[tauri::command(async)]
-fn stop_system_audio(state: State<'_, CaptureState>) -> Result<(), String> {
+fn stop_system_audio(state: State<'_, CaptureState>) -> Result<(), CaptureCommandError> {
     let session = state
         .0
         .lock()
-        .map_err(|_| "Capture state is unavailable.".to_string())?
+        .map_err(|_| {
+            CaptureCommandError::new(
+                CaptureErrorCode::StateUnavailable,
+                "Capture state is unavailable.",
+            )
+        })?
         .take();
     if let Some(session) = session {
         let _ = session.stop_tx.send(());
-        session
-            .handle
-            .join()
-            .map_err(|_| "The capture thread stopped unexpectedly.".to_string())?;
+        session.handle.join().map_err(|_| {
+            CaptureCommandError::new(
+                CaptureErrorCode::CaptureFailed,
+                "The capture thread stopped unexpectedly.",
+            )
+        })?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn restart_app(app: AppHandle) {
+    app.restart();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(CaptureState::default())
         .invoke_handler(tauri::generate_handler![
             start_system_audio,
-            stop_system_audio
+            stop_system_audio,
+            restart_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running DeveloperPulse");
@@ -283,6 +351,36 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classifies_shareable_content_permission_failures() {
+        let errors = [
+            SCError::NoShareableContent("TCC denied capture".to_string()),
+            SCError::PermissionDenied("Screen Recording".to_string()),
+            SCError::SCStreamError {
+                code: SCStreamErrorCode::UserDeclined,
+                message: None,
+            },
+        ];
+
+        for error in errors {
+            assert_eq!(
+                classify_shareable_content_error(error).code,
+                CaptureErrorCode::PermissionDenied
+            );
+        }
+    }
+
+    #[test]
+    fn classifies_unexpected_shareable_content_failures_as_capture_failures() {
+        assert_eq!(
+            classify_shareable_content_error(SCError::InternalError(
+                "Unexpected failure".to_string()
+            ))
+            .code,
+            CaptureErrorCode::CaptureFailed
+        );
+    }
 
     #[test]
     fn silence_is_empty() {

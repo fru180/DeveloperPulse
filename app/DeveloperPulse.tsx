@@ -19,6 +19,14 @@ import {
   updateLiveEnergies,
 } from "./audio/analysis";
 import { BrowserTabSource } from "./audio/browser-source";
+import {
+  clearCaptureRetryAfterRestart,
+  consumeCaptureRetryAfterRestart,
+  GENERIC_CAPTURE_ERROR_MESSAGE,
+  markCaptureRetryAfterRestart,
+  SYSTEM_AUDIO_PERMISSION_GUIDANCE,
+  SYSTEM_AUDIO_SETTINGS_URL,
+} from "./audio/capture-errors";
 import { isTauriRuntime, MacSystemAudioSource } from "./audio/tauri-source";
 import { createIdlePreviewGrid } from "./idle-preview";
 import {
@@ -28,6 +36,7 @@ import {
 } from "./live-cell-layout";
 import {
   BAND_LABELS,
+  CaptureError,
   TIMELINE_INTERVAL_MS,
   TIMELINE_WINDOW_SECONDS,
   type AnalysisSource,
@@ -187,7 +196,16 @@ export function DeveloperPulse() {
   const [mode, setMode] = useState<VisualizerMode>("live-cells");
   const [sensitivity, setSensitivity] = useState(0);
   const sensitivityRef = useRef(sensitivity);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CaptureError | null>(null);
+  const [permissionStep, setPermissionStep] = useState<
+    "needs-settings" | "needs-restart"
+  >("needs-settings");
+  const [permissionActionError, setPermissionActionError] = useState<
+    string | null
+  >(null);
+  const [permissionActionPending, setPermissionActionPending] = useState<
+    "opening-settings" | "restarting" | null
+  >(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState("00:00");
   const [theme, setTheme] = useState<Theme>(() => {
@@ -326,7 +344,9 @@ export function DeveloperPulse() {
       setState("idle");
       setStartedAt(null);
       setElapsed("00:00");
-      if (endedMessage) setError(endedMessage);
+      setError(
+        endedMessage ? new CaptureError("capture_ended", endedMessage) : null,
+      );
     },
     [source],
   );
@@ -334,6 +354,9 @@ export function DeveloperPulse() {
   const start = useCallback(async () => {
     setState("requesting");
     setError(null);
+    setPermissionStep("needs-settings");
+    setPermissionActionError(null);
+    setPermissionActionPending(null);
     timelineSmoothRef.current = null;
     previousTransientBandsRef.current = null;
     previousAnalysisAtRef.current = null;
@@ -404,12 +427,52 @@ export function DeveloperPulse() {
       setIdlePreview(createIdlePreviewGrid());
       setState("error");
       setError(
-        captureError instanceof Error
-          ? captureError.message
-          : "Could not start audio capture.",
+        captureError instanceof CaptureError
+          ? captureError
+          : new CaptureError("capture_failed", GENERIC_CAPTURE_ERROR_MESSAGE),
       );
     }
   }, [source, stop]);
+
+  useEffect(() => {
+    if (!desktop) return;
+    const retryTimer = window.setTimeout(() => {
+      if (consumeCaptureRetryAfterRestart(window.localStorage)) {
+        void start();
+      }
+    }, 0);
+    return () => window.clearTimeout(retryTimer);
+  }, [desktop, start]);
+
+  const openSystemSettings = useCallback(async () => {
+    setPermissionActionError(null);
+    setPermissionActionPending("opening-settings");
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(SYSTEM_AUDIO_SETTINGS_URL);
+      setPermissionStep("needs-restart");
+    } catch {
+      setPermissionActionError(SYSTEM_AUDIO_PERMISSION_GUIDANCE.openFailed);
+    } finally {
+      setPermissionActionPending(null);
+    }
+  }, []);
+
+  const restartAndRetry = useCallback(async () => {
+    setPermissionActionError(null);
+    setPermissionActionPending("restarting");
+    markCaptureRetryAfterRestart(window.localStorage);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("restart_app");
+    } catch {
+      clearCaptureRetryAfterRestart(window.localStorage);
+      setPermissionActionError(SYSTEM_AUDIO_PERMISSION_GUIDANCE.restartFailed);
+      setPermissionActionPending(null);
+    }
+  }, []);
+
+  const permissionDenied = desktop && error?.code === "permission_denied";
 
   const status =
     state === "requesting"
@@ -557,17 +620,80 @@ export function DeveloperPulse() {
             )}
           </div>
 
-          {error && (
+          {permissionDenied ? (
+            <section
+              className="permission-card"
+              role="alert"
+              aria-labelledby="permission-card-title"
+            >
+              <div className="permission-card-copy">
+                <h2 id="permission-card-title">
+                  {SYSTEM_AUDIO_PERMISSION_GUIDANCE.title}
+                </h2>
+                <p>{SYSTEM_AUDIO_PERMISSION_GUIDANCE.body}</p>
+                <code className="permission-settings-path">
+                  {SYSTEM_AUDIO_PERMISSION_GUIDANCE.settingsPath}
+                </code>
+                {permissionStep === "needs-restart" && (
+                  <p className="permission-next-step">
+                    {SYSTEM_AUDIO_PERMISSION_GUIDANCE.nextStep}
+                  </p>
+                )}
+                {permissionActionError && (
+                  <p className="permission-action-error">
+                    {permissionActionError}
+                  </p>
+                )}
+              </div>
+              <div className="permission-actions">
+                {permissionStep === "needs-restart" ? (
+                  <>
+                    <button
+                      className="primary-button permission-primary-button"
+                      type="button"
+                      disabled={permissionActionPending !== null}
+                      onClick={() => void restartAndRetry()}
+                    >
+                      {permissionActionPending === "restarting"
+                        ? "Restarting…"
+                        : "Restart & try again"}
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={permissionActionPending !== null}
+                      onClick={() => void openSystemSettings()}
+                    >
+                      {permissionActionPending === "opening-settings"
+                        ? "Opening…"
+                        : "Open System Settings"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="primary-button permission-primary-button"
+                    type="button"
+                    disabled={permissionActionPending !== null}
+                    onClick={() => void openSystemSettings()}
+                  >
+                    {permissionActionPending === "opening-settings"
+                      ? "Opening…"
+                      : "Open System Settings"}
+                  </button>
+                )}
+              </div>
+            </section>
+          ) : error ? (
             <div className="error-banner" role="alert">
-              {error}
+              {error.message}
             </div>
-          )}
+          ) : null}
 
           <div className="controls">
             <button
-              className={`primary-button ${state === "running" ? "stop" : ""}`}
+              className={`primary-button ${state === "running" ? "stop" : ""} ${state === "requesting" ? "requesting" : ""}`}
               type="button"
-              disabled={state === "requesting"}
+              disabled={state === "requesting" || permissionDenied}
               onClick={
                 state === "running" ? () => void stop() : () => void start()
               }
